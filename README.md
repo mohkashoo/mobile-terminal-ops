@@ -85,9 +85,12 @@ mobile-terminal-ops/
 ├── scripts/
 │   ├── connect.sh            # Smart reconnect wrapper
 │   ├── sync-clipboard.sh     # Clipboard bridge
-│   └── tmux-session.sh       # 3-pane tmux layout
+│   ├── tmux-session.sh       # 3-pane tmux layout
+│   ├── notify.sh             # Push alerts to phone (ntfy/Pushover)
+│   └── watch-session.sh      # Watch tmux pane for stalls/keywords
 ├── config/
 │   ├── ssh-config            # SSH config template
+│   ├── notify-config.example # Notification settings template
 │   └── tailscale-hardening.md
 └── .gitignore
 ```
@@ -205,6 +208,77 @@ See `scripts/sync-clipboard.sh` if you want automated clipboard polling.
 
 ---
 
+## Notifications (Phone Alerts)
+
+**The problem:** You disconnect from your SSH session (train, dead wifi, whatever). opencode finds something interesting or gets stuck waiting for you. You have no idea until you manually reconnect and check.
+
+**The fix:** `watch-session.sh` runs on the server alongside tmux. It watches your opencode pane and pushes a notification to your phone when something happens.
+
+### What triggers an alert
+
+| Trigger | Example | Default Threshold |
+|---|---|---|
+| **Stalled output** | opencode is waiting for your input and you're disconnected | 120s of no output change |
+| **Session ended** | opencode crashed, completed, or tmux pane died | Immediate |
+| **Keyword match** | Output contains "CRITICAL", "vulnerability found", or your custom patterns | Configurable regex list |
+
+### How it works
+
+```
+tmux pane → watch-session.sh (polls every 10s)
+                │
+                ├─ Output changed? → check keywords → alert on match
+                ├─ Output frozen?  → count seconds → alert on stall
+                └─ Pane gone?      → alert immediately
+                │
+                ▼
+         notify.sh ──→ ntfy.sh (default) or Pushover
+                            │
+                            ▼
+                     Your phone buzzes
+```
+
+### Setup (2 minutes)
+
+1. **Install the ntfy app** on your phone (Android Play Store / iOS App Store)
+2. **Pick a topic name** — anything unique, like `hunt-<random-letters>`
+3. **Subscribe to that topic** in the ntfy app
+4. **Configure on your server:**
+
+```bash
+cd mobile-terminal-ops
+cp config/notify-config.example config/notify-config
+nano config/notify-config
+# Set NTFY_TOPIC to whatever you picked
+```
+
+5. **Launch with notifications:**
+
+```bash
+bash scripts/tmux-session.sh --notify
+```
+
+That's it. Disconnect from SSH — if opencode stalls or finds something, your phone buzzes.
+
+### Tuning
+
+Edit `config/notify-config` to adjust:
+
+- `STALL_TIMEOUT` — seconds of silence before "stalled" alert (default: 120)
+- `COOLDOWN` — seconds between identical alerts (default: 300)
+- `KEYWORDS` — pipe-separated regex patterns for interesting output
+- `POLL_INTERVAL` — how often to check the pane (default: 10)
+
+### Pushover (optional)
+
+If you already use Pushover, set `PUSHOVER_USER` and `PUSHOVER_TOKEN` in the config instead of `NTFY_TOPIC`. When both are set, Pushover takes priority.
+
+### Degrades gracefully
+
+If `config/notify-config` doesn't exist or `NTFY_TOPIC` is empty, `watch-session.sh` skips silently. No alerts, no errors. Everything else still works.
+
+---
+
 ## Scripts Explained
 
 ### `setup/server-setup.sh`
@@ -226,8 +300,14 @@ SSH wrapper that retries 3 times, carries your clipboard, and reattaches to tmux
 ### `scripts/sync-clipboard.sh`
 Bidirectional clipboard sync. Pushes/pulls between phone and server via SSH.
 
+### `scripts/notify.sh`
+Sends a notification to your phone via ntfy.sh (default, no account needed) or Pushover. Called by `watch-session.sh`. Can also be used standalone: `bash notify.sh "Title" "Message" 4`.
+
+### `scripts/watch-session.sh`
+Watches a tmux pane and alerts your phone when: the pane stalls (no output change for N seconds), the session dies, or output matches a keyword pattern. Launched automatically by `tmux-session.sh --notify`. Reads config from `config/notify-config`.
+
 ### `scripts/tmux-session.sh`
-Opens a tmux workspace with three panes:
+Opens a tmux workspace with three panes. Pass `--notify` to also launch the notification watcher in the background.
 
 ```
 ┌──────────────────────────────────────┐

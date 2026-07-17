@@ -18,6 +18,9 @@ Thumbs.db
 *.pem
 *.key
 
+# Notification config (contains ntfy topic name — treat as semi-private)
+config/notify-config
+
 # Runtime
 __pycache__/
 *.pyc

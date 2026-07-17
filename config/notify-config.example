@@ -1,0 +1,34 @@
+# Notification configuration for mobile-terminal-ops
+# Copy this to config/notify-config and fill in your values.
+# notify-config is gitignored — your topic name stays private.
+
+# ── Required ──────────────────────────────────
+# ntfy.sh topic name (pick something unique, like "hunt-<random>")
+# Install the ntfy app on your phone and subscribe to this topic.
+NTFY_TOPIC=""
+
+# ── Optional: Pushover (alternative to ntfy) ──
+# If set, notifications go to Pushover instead of ntfy.
+# Get these from https://pushover.net
+# PUSHOVER_USER=""
+# PUSHOVER_TOKEN=""
+
+# ── Alert Thresholds (seconds) ────────────────
+# How long of no output before we alert "stalled"
+STALL_TIMEOUT=120
+
+# How long to wait between identical alerts (debounce)
+COOLDOWN=300
+
+# How often to check pane output (seconds)
+POLL_INTERVAL=10
+
+# ── Keyword Alerts ────────────────────────────
+# Pipe-separated regex patterns. If new output matches any,
+# an alert fires. Leave empty to disable.
+KEYWORDS="CRITICAL|vulnerability found|interesting|ERROR|BUG|found|admin"
+
+# ── tmux Target ───────────────────────────────
+# Which tmux session/window/pane to watch
+# Format: session:window.pane  (e.g. "hunt:0.0" for first pane)
+TMUX_TARGET="hunt:0.0"
