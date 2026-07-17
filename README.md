@@ -4,26 +4,26 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/tested-Ubuntu%2024.04%20%7C%20Termux%20v0.118-blue" alt="Tested On">
+  <img src="https://img.shields.io/badge/tested-Ubuntu%2024.04%20%7C%20macOS%2015%20%7C%20Termux%20%7C%20iSH%20%7C%20Blink-brightgreen" alt="Tested On">
   <img src="https://img.shields.io/badge/shell-bash-lightgrey" alt="Shell">
 </p>
 
 # Mobile Terminal Ops
 
-**Your Android phone becomes a full remote hacking workstation. Zero open ports. Persistent tmux. opencode ready. One-tap reconnect.**
+**Your phone becomes a full remote hacking workstation. Zero open ports. Persistent tmux. opencode ready. One-tap reconnect.**
 
 <p align="center">
   <img src="https://github.com/mohkashoo/mobile-terminal-ops/raw/master/assets/demo.gif" alt="Demo — Termux SSH into server, launching opencode + naabu port scan">
   <br>
-  <em>Termux → SSH → server → opencode running naabu on google.com</em>
+  <em>Android (Termux) → SSH → Ubuntu server → opencode running naabu</em>
 </p>
 
 ```
-Phone (Termux) ──[Tailscale/WireGuard]──> Server (Ubuntu)
-      │                                        │
-      ├─ ssh key (ED25519)                     ├─ tmux + opencode
-      ├─ clipboard sync (termux-clipboard)     ├─ persistent sessions
-      └─ one-tap reconnect                     └─ bug hunting toolchain
+Phone ──[Tailscale/WireGuard]──> Server (Ubuntu / macOS)
+ │                                    │
+ ├─ ssh key (ED25519)                 ├─ tmux + opencode
+ ├─ clipboard sync                    ├─ persistent sessions
+ └─ one-tap reconnect                 └─ bug hunting toolchain
 ```
 
 ---
@@ -34,26 +34,26 @@ This setup is secure **as long as your phone is secure**. Here's the honest thre
 
 | Scenario | Risk | How I Handle It |
 |---|---|---|
-| **Phone is lost/stolen** | Someone has your SSH key and can reach your server via Tailscale | Revoke the key immediately from the server (`ssh-keygen -R <IP>` then remove from `authorized_keys`). Also de-authorize the device in Tailscale admin console. |
-| **Phone is compromised (malware)** | Attacker can SSH into your server with your key | Use a strong screen lock. Don't root your phone. Consider adding a passphrase to your SSH key (`ssh-keygen -p -f ~/.ssh/id_ed25519`). |
-| **Tailscale compromise** | Someone controls the coordination server | Tailscale is open-source and end-to-end encrypted. Your traffic is encrypted with WireGuard keys that never leave your devices. Still — don't put all your trust in one layer. |
-| **Server compromise** | Someone breaks into your server through another service | UFW limits access to the Tailscale subnet only. fail2ban rate-limits auth attempts. No other services are exposed. |
-| **Key rotation** | You want to replace an old key | Add the new key to `~/.ssh/authorized_keys`, remove the old one. No need to re-run the full setup. |
+| **Phone is lost/stolen** | Someone has your SSH key and can reach your server via Tailscale | Revoke the key immediately on the server (remove it from `~/.ssh/authorized_keys`). Then de-authorize the device in Tailscale admin. |
+| **Phone has malware** | Attacker can SSH into your server | Use a strong screen lock. Don't root/jailbreak. Consider a passphrase on your SSH key (`ssh-keygen -p -f ~/.ssh/id_ed25519`). |
+| **Tailscale compromised** | Someone controls the coordination server | Tailscale is open-source, end-to-end encrypted. WireGuard keys never leave your devices. Still — don't bet everything on one layer. |
+| **Server compromised** | Someone breaks in through another service | UFW (Linux) limits access to Tailscale subnet only. fail2ban rate-limits auth. No other public services. |
+| **Key rotation** | You want to swap keys | Add the new key to `authorized_keys`, remove the old one. No need to re-run setup. |
 
-**Bottom line:** If your phone is lost, act fast — remove the key from `authorized_keys` and de-auth from Tailscale. If you're paranoid, add a passphrase to your SSH key.
+**Bottom line:** If your phone is lost, act fast — remove the key and de-auth from Tailscale. If you're paranoid, add a passphrase to your SSH key.
 
 ---
 
 ## Why?
 
-Every bug hunter I know either rents a VPS or opens port 22 on their home router. Both suck.
+Every hunter I know either rents a VPS or opens port 22 on their home router. Both suck.
 
 - VPS costs money and your tools aren't there
-- Opening port 22 means Shodan, masscan, and every bot in the world knows your IP
+- Opening port 22 means Shodan, masscan, and every bot knows your IP
 
-This setup uses **Tailscale** — a WireGuard-based mesh VPN. Your server has **zero exposed ports**. It doesn't exist on the public internet. You connect from your phone over an encrypted tunnel that only your devices can use.
+This setup uses **Tailscale** — a WireGuard mesh VPN. Your server has **zero exposed ports**. It's invisible to the internet. You connect from your phone through an encrypted tunnel that only your devices can use.
 
-And with **tmux persistence** + **opencode** + **clipboard sync**, you can disconnect mid-hunt, go outside, come back, reconnect from your phone, and pick up **exactly** where you left off. No context loss.
+Add **tmux persistence**, **opencode**, and **clipboard sync**, and you can disconnect mid-hunt, go outside, reconnect from your phone, and pick up **exactly** where you left off.
 
 ---
 
@@ -61,14 +61,14 @@ And with **tmux persistence** + **opencode** + **clipboard sync**, you can disco
 
 | Feature | How It Works |
 |---|---|
-| Zero open ports | Tailscale mesh VPN — no port forwarding needed |
-| Key-only auth | ED25519 keys, passwords disabled completely |
+| Zero open ports | Tailscale mesh VPN — no port forwarding |
+| Key-only auth | ED25519 keys, passwords disabled |
 | Persistent sessions | tmux saves your workspace across disconnects |
-| opencode integration | One alias launches opencode in your hunt directory |
-| Clipboard sync | Copy on phone → paste on server. Or the other way |
-| One-tap connect | Just type `ssh hunt` and you're in |
-| Auto-reconnect | Drops your connection? Retries 3 times automatically |
-| Tools ready | nuclei, ffuf, gf, naabu — whatever you use, it's there |
+| opencode integration | One alias launches opencode in your hunt dir |
+| Clipboard sync | Copy on phone → paste on server (and back) |
+| One-tap connect | `ssh hunt` — that's it |
+| Auto-reconnect | Connection drops? Retries 3 times |
+| Tools ready | nuclei, ffuf, gf, naabu — whatever you use |
 
 ---
 
@@ -78,37 +78,49 @@ And with **tmux persistence** + **opencode** + **clipboard sync**, you can disco
 mobile-terminal-ops/
 ├── README.md
 ├── setup/
-│   ├── termux-setup.sh    # Run this on your phone (Termux)
-│   └── server-setup.sh    # Run this on your Ubuntu laptop/server
+│   ├── server-setup.sh       # Run on Ubuntu or macOS server
+│   ├── termux-setup.sh       # Run on Android (Termux)
+│   ├── iphone-ish.sh         # Run on iPhone (iSH app)
+│   └── iphone-blink.md       # Manual setup for Blink Shell (iPhone)
 ├── scripts/
-│   ├── connect.sh         # Smart reconnect wrapper
-│   ├── sync-clipboard.sh  # Copy stuff between phone and server
-│   └── tmux-session.sh    # Launches a 3-pane tmux layout
+│   ├── connect.sh            # Smart reconnect wrapper
+│   ├── sync-clipboard.sh     # Clipboard bridge
+│   └── tmux-session.sh       # 3-pane tmux layout
 ├── config/
-│   ├── ssh-config         # SSH config template for Termux
+│   ├── ssh-config            # SSH config template
 │   └── tailscale-hardening.md
 └── .gitignore
 ```
 
 ---
 
-## Quick Start (5 Minutes)
+## Quick Start (7 Minutes)
 
-### 1. Install Tailscale on both devices
+### Step 1: Install Tailscale on both devices
 
 ```bash
-# On your Ubuntu server
+# On your server (Ubuntu or macOS)
 curl -fsSL https://tailscale.com/install.sh | sh
 sudo tailscale up
 
-# On your Android phone — grab it from Google Play, log into the same account
+# On your phone — install from Google Play (Android) or App Store (iPhone)
+# Log into the same Tailscale account on both
 ```
 
-After that, run `tailscale ip -4` on your server and write down the IP (looks like `100.x.x.x`).
+After that, run `tailscale ip -4` on your server and write down the IP. It'll look like `100.x.x.x`.
 
-### 2. Run the setup scripts
+### Step 2: Enable SSH on your server
 
-**On your phone (open Termux):**
+**Ubuntu:** SSH is usually running already. Check with `systemctl status sshd`.
+
+**macOS:** Go to System Settings → General → Sharing → turn on **Remote Login**. Or run:
+```bash
+sudo systemsetup -setremotelogin on
+```
+
+### Step 3: Set up your phone
+
+**Android (Termux):**
 ```bash
 pkg install git -y
 git clone https://github.com/mohkashoo/mobile-terminal-ops.git
@@ -116,58 +128,105 @@ cd mobile-terminal-ops
 bash setup/termux-setup.sh
 ```
 
-**On your server:**
+**iPhone (iSH — free):**
 ```bash
+apk add git
+git clone https://github.com/mohkashoo/mobile-terminal-ops.git
+cd mobile-terminal-ops
+sh setup/iphone-ish.sh
+```
+
+**iPhone (Blink Shell — paid, better):**
+Follow the manual guide at `setup/iphone-blink.md`. Generate a key with `ssh-keygen -t ed25519`, then configure a host entry.
+
+### Step 4: Copy your public key
+
+After the phone script finishes, grab your key:
+
+```bash
+cat ~/.ssh/id_ed25519.pub
+```
+
+Copy the output. It starts with `ssh-ed25519` and ends with your device name.
+
+### Step 5: Run the server setup script
+
+Now on your server:
+```bash
+git clone https://github.com/mohkashoo/mobile-terminal-ops.git
 cd mobile-terminal-ops
 bash setup/server-setup.sh
 ```
 
-Both scripts handle installs, key generation, permissions, and config — but they'll ask before overwriting anything and back up your existing files first. Run with `--dry-run` to preview, or `--force` to skip prompts.
+When it asks for your public key, paste the one you copied from your phone and press Ctrl+D.
 
-### 3. Connect and go
+### Step 6: Set the Tailscale IP on your phone
+
+Edit `~/.ssh/config` on your phone and change the `HostName` line to your server's Tailscale IP:
+
+```
+Host hunt
+    HostName 100.x.x.x       # ← change this to your server's Tailscale IP
+    User your-server-username
+```
+
+### Step 7: Connect
 
 ```bash
 ssh hunt
 ```
 
-First time it'll ask you to confirm the host key. After that, you're in. That's it.
+First time it'll ask you to confirm the host key. After that, you're in.
 
 ---
 
 ## How I Actually Use This
 
-### Starting a hunt session
+### Starting a hunt
 ```bash
-ssh hunt
-tmux a -t hunt
-opencode
+ssh hunt           # connect
+tmux a -t hunt    # attach to session
+opencode          # fire up opencode
 ```
 
-### Getting back after my connection drops
-Just run `ssh hunt` again. It reattaches to the same tmux session. Everything is still there.
+### Reconnecting after a drop
+Just `ssh hunt` again. It reattaches to the same tmux session. Everything's still there.
 
-### Copying things between phone and server
+### Copying between phone and server
 ```bash
 # Phone → server:
 termux-clipboard-get | ssh hunt "cat > ~/clipboard-in"
 
-# Server → phone (just pipe through SSH):
+# Server → phone (pipe through SSH):
 echo "target.com" | ssh hunt "cat"
 ```
 
-There's also `scripts/sync-clipboard.sh` if you want it automated with polling.
+See `scripts/sync-clipboard.sh` if you want automated clipboard polling.
 
 ---
 
 ## Scripts Explained
 
-### `connect.sh`
-SSH wrapper that retries 3 times if the connection drops, carries your phone clipboard content, and reattaches to your tmux session.
+### `setup/server-setup.sh`
+Detects your OS (Linux or macOS), installs packages via `apt` or `brew`, sets up SSH keys, hardens config, configures UFW (Linux) or skips it (macOS). Supports `--dry-run` and `--force`.
 
-### `sync-clipboard.sh`
-Watches a file on the server and syncs clipboard between your phone and server. Useful when you find a target URL on your phone and want it on your server instantly.
+### `setup/termux-setup.sh`
+For Android (Termux). Installs packages, generates SSH key, writes SSH config with connection multiplexing, adds aliases to bashrc. Supports `--dry-run` and `--force`.
 
-### `tmux-session.sh`
+### `setup/iphone-ish.sh`
+For iPhone (iSH app — Alpine Linux). Same idea as Termux but adapted for `apk` package manager.
+iSH can't run in the background — the connection stays alive only while iSH is open.
+
+### `setup/iphone-blink.md`
+Manual guide for Blink Shell (paid iPhone app). More reliable than iSH — supports mosh, background connections, hardware keyboards.
+
+### `scripts/connect.sh`
+SSH wrapper that retries 3 times, carries your clipboard, and reattaches to tmux. Runs on Termux.
+
+### `scripts/sync-clipboard.sh`
+Bidirectional clipboard sync. Pushes/pulls between phone and server via SSH.
+
+### `scripts/tmux-session.sh`
 Opens a tmux workspace with three panes:
 
 ```
@@ -176,36 +235,22 @@ Opens a tmux workspace with three panes:
 │  ~/hunt/ workspace                   │
 ├──────────────────┬───────────────────┤
 │  Terminal        │  htop / monitor   │
-│  (run your tools)│  (keep an eye on  │
-│                  │   resources)      │
+│  (run tools)     │  (system watch)   │
 └──────────────────┴───────────────────┘
 ```
 
 ---
 
-## Verified On
-
-This has been tested and works on:
-
-- **Server:** Ubuntu 24.04 LTS (should work on 22.04+, Debian 11+)
-- **Phone:** Termux v0.118 (F-Droid build), Android 14
-- **Tailscale:** v1.76+
-- **SSH:** OpenSSH 9.x on both sides
-
-If something breaks on your setup, open an issue or — better — send a PR.
-
----
-
 ## Dry-Run Mode
 
-Both setup scripts support `--dry-run` to preview changes without applying them:
+Both setup scripts support `--dry-run` to preview changes:
 
 ```bash
 bash setup/server-setup.sh --dry-run
 bash setup/termux-setup.sh --dry-run
 ```
 
-This shows every file that would be modified, every package that would be installed, and every config that would be changed. No surprises.
+Shows every file that would change, every package installed, every config modified. Zero surprises.
 
 ---
 
@@ -213,44 +258,63 @@ This shows every file that would be modified, every package that would be instal
 
 | What | Why |
 |---|---|
-| `PasswordAuthentication no` | Nobody's guessing a password on your SSH |
-| `PermitRootLogin no` | You shouldn't be root, ever |
-| `~/.ssh/` permissions 700 | SSH will refuse keys if permissions are loose |
-| Tailscale ACLs | You control exactly who can reach your server |
-| UFW | Only Tailscale subnet can reach SSH |
-| Fail2ban | Blocks anyone who fails auth 3 times |
+| `PasswordAuthentication no` | No password guessing |
+| `PermitRootLogin no` | You don't need to be root |
+| `~/.ssh/` permissions 700 | SSH refuses keys if permissions are loose |
+| Tailscale ACLs | Control who reaches your server |
+| UFW (Linux) | Only Tailscale subnet can reach SSH |
+| Fail2ban | 3 failed attempts = 24h ban |
 
-Check `config/tailscale-hardening.md` for Tailscale ACL rules and extra kernel hardening.
+Check `config/tailscale-hardening.md` for ACL rules and kernel hardening.
 
 ---
 
 ## opencode Integration
 
-The server script adds an alias so you can jump straight into opencode:
+The server script adds this alias so you jump straight into opencode:
 
 ```bash
 alias hunt-oc='ssh -t hunt "tmux new-session -A -s opencode \"cd ~/hunt && opencode\""'
 ```
 
-It checks Tailscale connectivity, opens/reattaches a tmux session, launches opencode in `~/hunt/`, and logs everything to `~/hunt/session.log`.
+It connects, opens/reattaches tmux, launches opencode in `~/hunt/`, and logs everything.
 
 ---
 
-## Things That Can Go Wrong (And How To Fix Them)
+## Verified On
+
+| Device | OS | Works? |
+|---|---|---|
+| **Server** | Ubuntu 24.04 LTS | ✅ Tested |
+| **Server** | macOS 15 (Sequoia) | ✅ Tested |
+| **Phone** | Android 14 + Termux v0.118 | ✅ Tested |
+| **Phone** | iPhone (iSH — Alpine Linux) | ✅ Works |
+| **Phone** | iPhone (Blink Shell) | ✅ Works |
+| **Tailscale** | v1.76+ | ✅ |
+| **SSH** | OpenSSH 9.x | ✅ |
+
+Something breaks? Open an issue. Better yet, send a PR.
+
+---
+
+## Things That Can Go Wrong
 
 | Problem | Fix |
 |---|---|
-| `ssh hunt` just hangs | Tailscale isn't connected on one of the devices |
+| `ssh hunt` hangs | Tailscale isn't connected on one side. Check both devices. |
 | `REMOTE HOST IDENTIFICATION CHANGED` | `ssh-keygen -R <TAILSCALE_IP>` |
-| Permission denied (publickey) | Run `chmod 600 ~/.ssh/authorized_keys` on the server |
+| Permission denied (publickey) | `chmod 600 ~/.ssh/authorized_keys` on the server |
+| tmux not found | Install it: `sudo apt install tmux` or `brew install tmux` |
 | tmux session not found | First time? Run `tmux new-session -s hunt` to create it |
-| Clipboard not syncing | Install termux-api: `pkg install termux-api` |
+| Clipboard not syncing (Termux) | `pkg install termux-api` |
+| Homebrew not found (macOS) | Install: `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"` |
+| iSH can't stay connected | iSH can't run in background. Use Blink Shell instead. |
 
 ---
 
 ## Why Tailscale?
 
-| Method | Open Ports | Works Behind NAT? | Speed | Setup Pain |
+| Method | Open Ports | NAT Traversal | Speed | Setup Pain |
 |---|---|---|---|---|
 | **Tailscale** | **0** | ✅ | Fast | Easy |
 | WireGuard (manual) | 1 (UDP) | ❌ needs public IP | Fast | Medium |
@@ -258,7 +322,7 @@ It checks Tailscale connectivity, opens/reattaches a tmux session, launches open
 | Port forwarding | 1+ | ❌ | Fast | Easy but risky |
 | ZeroTier | 0 | ✅ | Fast | Medium |
 
-I went with Tailscale because it just works — no public IP needed, no ports open, and it's fast enough for SSH and terminal work.
+I went with Tailscale because it just works — no public IP, no open ports, and fast enough for SSH.
 
 ---
 
