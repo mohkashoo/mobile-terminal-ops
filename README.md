@@ -68,7 +68,7 @@ mobile-terminal-ops/
 curl -fsSL https://tailscale.com/install.sh | sh
 sudo tailscale up
 
-# Phone: install from Play Store / F-Droid, log into same account
+# Phone: install from Google Play, log into same account
 ```
 
 Note the Tailscale IP of your server (`tailscale ip -4`).
