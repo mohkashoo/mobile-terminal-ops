@@ -6,6 +6,12 @@
 
 **Turn your Android phone into a full remote pentest workstation — zero open ports, persistent tmux sessions, opencode integration, and one-tap reconnect.**
 
+<p align="center">
+  <img src="https://github.com/mohkashoo/mobile-terminal-ops/raw/master/assets/demo.gif" alt="Demo — Termux SSH into server, launching opencode + naabu port scan">
+  <br>
+  <em>Termux → SSH → server → opencode + naabu port scan on google.com</em>
+</p>
+
 ```
 Phone (Termux) ──[Tailscale/WireGuard]──> Server (Ubuntu)
       │                                        │
