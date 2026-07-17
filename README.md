@@ -2,6 +2,12 @@
   <img src="https://github.com/mohkashoo/mobile-terminal-ops/raw/master/.github/social-preview.png" alt="Mobile Terminal Ops">
 </p>
 
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
+  <img src="https://img.shields.io/badge/tested-Ubuntu%2024.04%20%7C%20Termux%20v0.118-blue" alt="Tested On">
+  <img src="https://img.shields.io/badge/shell-bash-lightgrey" alt="Shell">
+</p>
+
 # Mobile Terminal Ops
 
 **Your Android phone becomes a full remote hacking workstation. Zero open ports. Persistent tmux. opencode ready. One-tap reconnect.**
@@ -19,6 +25,22 @@ Phone (Termux) ──[Tailscale/WireGuard]──> Server (Ubuntu)
       ├─ clipboard sync (termux-clipboard)     ├─ persistent sessions
       └─ one-tap reconnect                     └─ bug hunting toolchain
 ```
+
+---
+
+## Security Model & Known Risks
+
+This setup is secure **as long as your phone is secure**. Here's the honest threat model:
+
+| Scenario | Risk | How I Handle It |
+|---|---|---|
+| **Phone is lost/stolen** | Someone has your SSH key and can reach your server via Tailscale | Revoke the key immediately from the server (`ssh-keygen -R <IP>` then remove from `authorized_keys`). Also de-authorize the device in Tailscale admin console. |
+| **Phone is compromised (malware)** | Attacker can SSH into your server with your key | Use a strong screen lock. Don't root your phone. Consider adding a passphrase to your SSH key (`ssh-keygen -p -f ~/.ssh/id_ed25519`). |
+| **Tailscale compromise** | Someone controls the coordination server | Tailscale is open-source and end-to-end encrypted. Your traffic is encrypted with WireGuard keys that never leave your devices. Still — don't put all your trust in one layer. |
+| **Server compromise** | Someone breaks into your server through another service | UFW limits access to the Tailscale subnet only. fail2ban rate-limits auth attempts. No other services are exposed. |
+| **Key rotation** | You want to replace an old key | Add the new key to `~/.ssh/authorized_keys`, remove the old one. No need to re-run the full setup. |
+
+**Bottom line:** If your phone is lost, act fast — remove the key from `authorized_keys` and de-auth from Tailscale. If you're paranoid, add a passphrase to your SSH key.
 
 ---
 
@@ -158,6 +180,32 @@ Opens a tmux workspace with three panes:
 │                  │   resources)      │
 └──────────────────┴───────────────────┘
 ```
+
+---
+
+## Verified On
+
+This has been tested and works on:
+
+- **Server:** Ubuntu 24.04 LTS (should work on 22.04+, Debian 11+)
+- **Phone:** Termux v0.118 (F-Droid build), Android 14
+- **Tailscale:** v1.76+
+- **SSH:** OpenSSH 9.x on both sides
+
+If something breaks on your setup, open an issue or — better — send a PR.
+
+---
+
+## Dry-Run Mode
+
+Both setup scripts support `--dry-run` to preview changes without applying them:
+
+```bash
+bash setup/server-setup.sh --dry-run
+bash setup/termux-setup.sh --dry-run
+```
+
+This shows every file that would be modified, every package that would be installed, and every config that would be changed. No surprises.
 
 ---
 
