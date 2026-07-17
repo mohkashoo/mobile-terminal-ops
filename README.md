@@ -4,12 +4,12 @@
 
 # Mobile Terminal Ops
 
-**Turn your Android phone into a full remote pentest workstation — zero open ports, persistent tmux sessions, opencode integration, and one-tap reconnect.**
+**Your Android phone becomes a full remote hacking workstation. Zero open ports. Persistent tmux. opencode ready. One-tap reconnect.**
 
 <p align="center">
   <img src="https://github.com/mohkashoo/mobile-terminal-ops/raw/master/assets/demo.gif" alt="Demo — Termux SSH into server, launching opencode + naabu port scan">
   <br>
-  <em>Termux → SSH → server → opencode + naabu port scan on google.com</em>
+  <em>Termux → SSH → server → opencode running naabu on google.com</em>
 </p>
 
 ```
@@ -22,69 +22,74 @@ Phone (Termux) ──[Tailscale/WireGuard]──> Server (Ubuntu)
 
 ---
 
-## Why This Exists
+## Why?
 
-Most bug hunters tether to a VPS or open port 22 on their home router. Both are attack surfaces. This setup uses **Tailscale** (WireGuard-based mesh VPN) so your server has **zero exposed ports** — it's invisible to Shodan, masscan, and your ISP. You connect from your phone over an encrypted overlay network.
+Every bug hunter I know either rents a VPS or opens port 22 on their home router. Both suck.
 
-Add **tmux persistence**, **opencode**, and **clipboard sync**, and you never lose context — disconnect mid-hunt, reconnect from the train, and pick up exactly where you left off.
+- VPS costs money and your tools aren't there
+- Opening port 22 means Shodan, masscan, and every bot in the world knows your IP
+
+This setup uses **Tailscale** — a WireGuard-based mesh VPN. Your server has **zero exposed ports**. It doesn't exist on the public internet. You connect from your phone over an encrypted tunnel that only your devices can use.
+
+And with **tmux persistence** + **opencode** + **clipboard sync**, you can disconnect mid-hunt, go outside, come back, reconnect from your phone, and pick up **exactly** where you left off. No context loss.
 
 ---
 
-## What You Get
+## What You're Getting
 
-| Feature | How |
+| Feature | How It Works |
 |---|---|
-| Zero open ports | Tailscale mesh VPN — no port forwarding |
-| Key-only auth | ED25519 keys, passwords disabled |
-| Persistent sessions | tmux resurrects your entire workspace |
-| opencode ready | Pre-configured alias + session launcher |
-| Clipboard sync | Copy from phone, paste on server (and vice versa) |
-| One-tap connect | `ssh hunt` — that's it |
-| Reconnect resilience | Auto-retry on network drop, same session |
-| Bug hunting pipeline | Your tools (nuclei, ffuf, gf, etc.) ready on connect |
+| Zero open ports | Tailscale mesh VPN — no port forwarding needed |
+| Key-only auth | ED25519 keys, passwords disabled completely |
+| Persistent sessions | tmux saves your workspace across disconnects |
+| opencode integration | One alias launches opencode in your hunt directory |
+| Clipboard sync | Copy on phone → paste on server. Or the other way |
+| One-tap connect | Just type `ssh hunt` and you're in |
+| Auto-reconnect | Drops your connection? Retries 3 times automatically |
+| Tools ready | nuclei, ffuf, gf, naabu — whatever you use, it's there |
 
 ---
 
-## Project Structure
+## Project Layout
 
 ```
 mobile-terminal-ops/
-├── README.md              # You are here
+├── README.md
 ├── setup/
-│   ├── termux-setup.sh    # Run this on your Android phone
-│   └── server-setup.sh    # Run this on your Ubuntu server
+│   ├── termux-setup.sh    # Run this on your phone (Termux)
+│   └── server-setup.sh    # Run this on your Ubuntu laptop/server
 ├── scripts/
-│   ├── connect.sh         # Quick-connect alias for Termux
-│   ├── sync-clipboard.sh  # Bidirectional clipboard bridge
-│   └── tmux-session.sh    # Persistent tmux workspace launcher
+│   ├── connect.sh         # Smart reconnect wrapper
+│   ├── sync-clipboard.sh  # Copy stuff between phone and server
+│   └── tmux-session.sh    # Launches a 3-pane tmux layout
 ├── config/
-│   ├── ssh-config         # ~/.ssh/config template
+│   ├── ssh-config         # SSH config template for Termux
 │   └── tailscale-hardening.md
 └── .gitignore
 ```
 
 ---
 
-## Quick Start
+## Quick Start (5 Minutes)
 
-### 1. Tailscale (both devices)
+### 1. Install Tailscale on both devices
 
 ```bash
-# Server
+# On your Ubuntu server
 curl -fsSL https://tailscale.com/install.sh | sh
 sudo tailscale up
 
-# Phone: install from Google Play, log into same account
+# On your Android phone — grab it from Google Play, log into the same account
 ```
 
-Note the Tailscale IP of your server (`tailscale ip -4`).
+After that, run `tailscale ip -4` on your server and write down the IP (looks like `100.x.x.x`).
 
 ### 2. Run the setup scripts
 
-**On your phone (Termux):**
+**On your phone (open Termux):**
 ```bash
 pkg install git -y
-git clone https://github.com/kashoobest-droid/mobile-terminal-ops.git
+git clone https://github.com/mohkashoo/mobile-terminal-ops.git
 cd mobile-terminal-ops
 bash setup/termux-setup.sh
 ```
@@ -95,122 +100,120 @@ cd mobile-terminal-ops
 bash setup/server-setup.sh
 ```
 
-The scripts handle: package installation, key generation, permission hardening, SSH config, and disabling password auth.
+Both scripts are fully automated — they install packages, generate SSH keys, harden permissions, and configure everything.
 
-### 3. Connect
+### 3. Connect and go
 
 ```bash
 ssh hunt
 ```
 
-That's it. First time you'll be prompted to confirm the host key.
+First time it'll ask you to confirm the host key. After that, you're in. That's it.
 
 ---
 
-## Usage Workflow
+## How I Actually Use This
 
-### Standard hunt session
+### Starting a hunt session
 ```bash
-ssh hunt                    # connect
-tmux a -t hunt             # attach to persistent session
-opencode                   # fire up opencode in the workspace
+ssh hunt
+tmux a -t hunt
+opencode
 ```
 
-### Quick reconnect (after disconnect)
-```bash
-ssh hunt                   # automatically reattaches to tmux session
-```
+### Getting back after my connection drops
+Just run `ssh hunt` again. It reattaches to the same tmux session. Everything is still there.
 
-### Clipboard sync
+### Copying things between phone and server
 ```bash
-# From phone to server:
+# Phone → server:
 termux-clipboard-get | ssh hunt "cat > ~/clipboard-in"
 
-# From server to phone (pipe through ssh):
-echo "target.com" | ssh hunt "cat"   # standard output back to phone
+# Server → phone (just pipe through SSH):
+echo "target.com" | ssh hunt "cat"
 ```
 
-See `scripts/sync-clipboard.sh` for the automated version with `inotify` polling.
+There's also `scripts/sync-clipboard.sh` if you want it automated with polling.
 
 ---
 
-## Automation Scripts Detail
+## Scripts Explained
 
-### `scripts/connect.sh`
-One-liner ssh wrapper with:
-- Auto-reconnect on network drop (up to 3 retries)
-- Reattaches to `hunt` tmux session on connect
-- Passes clipboard content from phone as stdin
+### `connect.sh`
+SSH wrapper that retries 3 times if the connection drops, carries your phone clipboard content, and reattaches to your tmux session.
 
-### `scripts/sync-clipboard.sh`
-Bidirectional clipboard sync daemon:
-- Watches `~/.phone-clipboard` for changes
-- Pushes/pulls via Termux:Clipboard API over SSH
-- Useful for copying bug bounty target URLs between devices
+### `sync-clipboard.sh`
+Watches a file on the server and syncs clipboard between your phone and server. Useful when you find a target URL on your phone and want it on your server instantly.
 
-### `scripts/tmux-session.sh`
-Creates a tmux workspace with:
-- **Pane 0:** opencode session in `~/hunt/` workspace
-- **Pane 1:** Terminal for running tools (nuclei, ffuf, curl)
-- **Pane 2:** HTOP / system monitor
-- **Status bar** shows target IP, active tool, and connection status
+### `tmux-session.sh`
+Opens a tmux workspace with three panes:
+
+```
+┌──────────────────────────────────────┐
+│  opencode session                    │
+│  ~/hunt/ workspace                   │
+├──────────────────┬───────────────────┤
+│  Terminal        │  htop / monitor   │
+│  (run your tools)│  (keep an eye on  │
+│                  │   resources)      │
+└──────────────────┴───────────────────┘
+```
 
 ---
 
-## Security Hardening
+## Security Stuff I Set Up
 
-| Setting | Why |
+| What | Why |
 |---|---|
-| `PasswordAuthentication no` | Key-only access, no brute force |
-| `PermitRootLogin no` | Never log in as root |
-| `~/.ssh/` permissions 700 | SSH refuses keys if group-writable |
-| Tailscale ACLs | Restrict which devices can reach which ports |
-| Fail2ban (optional) | Rate-limit auth failures on LAN |
+| `PasswordAuthentication no` | Nobody's guessing a password on your SSH |
+| `PermitRootLogin no` | You shouldn't be root, ever |
+| `~/.ssh/` permissions 700 | SSH will refuse keys if permissions are loose |
+| Tailscale ACLs | You control exactly who can reach your server |
+| UFW | Only Tailscale subnet can reach SSH |
+| Fail2ban | Blocks anyone who fails auth 3 times |
 
-See `config/tailscale-hardening.md` for advanced ACL rules.
+Check `config/tailscale-hardening.md` for Tailscale ACL rules and extra kernel hardening.
 
 ---
 
 ## opencode Integration
 
-The server setup script provisions a `~/.opencode.json` and adds a `hunt()` bash function that:
+The server script adds an alias so you can jump straight into opencode:
 
-1. Checks Tailscale connectivity
-2. Opens or reattaches tmux session
-3. Launches opencode in your `~/hunt/` directory
-4. Logs the session to `~/hunt/session.log`
-
-Relevant alias added to `~/.bashrc`:
 ```bash
 alias hunt-oc='ssh -t hunt "tmux new-session -A -s opencode \"cd ~/hunt && opencode\""'
 ```
 
+It checks Tailscale connectivity, opens/reattaches a tmux session, launches opencode in `~/hunt/`, and logs everything to `~/hunt/session.log`.
+
 ---
 
-## Troubleshooting
+## Things That Can Go Wrong (And How To Fix Them)
 
 | Problem | Fix |
 |---|---|
-| `ssh hunt` hangs | Check Tailscale is connected on both sides |
+| `ssh hunt` just hangs | Tailscale isn't connected on one of the devices |
 | `REMOTE HOST IDENTIFICATION CHANGED` | `ssh-keygen -R <TAILSCALE_IP>` |
-| Permission denied (publickey) | `chmod 600 ~/.ssh/authorized_keys` on server |
-| tmux session not found | Run `tmux new-session -s hunt` first time |
-| Clipboard not syncing | Install `termux-clipboard-get/set` via `pkg install termux-api` |
+| Permission denied (publickey) | Run `chmod 600 ~/.ssh/authorized_keys` on the server |
+| tmux session not found | First time? Run `tmux new-session -s hunt` to create it |
+| Clipboard not syncing | Install termux-api: `pkg install termux-api` |
 
 ---
 
-## Why Tailscale vs. Alternatives
+## Why Tailscale?
 
-| Method | Open Ports | NAT Traversal | Speed | Complexity |
+| Method | Open Ports | Works Behind NAT? | Speed | Setup Pain |
 |---|---|---|---|---|
-| **Tailscale** (this setup) | **0** | ✅ | ⚡ | Low |
-| WireGuard directly | 1 (UDP) | ❌ requires public IP | ⚡ | Medium |
-| ngrok / bore | 0 | ✅ | 🐢 | Low |
-| Port forwarding | 1+ | ❌ | ⚡ | Low but risky |
-| ZeroTier | 0 | ✅ | ⚡ | Medium |
+| **Tailscale** | **0** | ✅ | Fast | Easy |
+| WireGuard (manual) | 1 (UDP) | ❌ needs public IP | Fast | Medium |
+| ngrok / bore | 0 | ✅ | Slow | Easy |
+| Port forwarding | 1+ | ❌ | Fast | Easy but risky |
+| ZeroTier | 0 | ✅ | Fast | Medium |
+
+I went with Tailscale because it just works — no public IP needed, no ports open, and it's fast enough for SSH and terminal work.
 
 ---
 
 ## License
 
-MIT — use it, fork it, improve it.
+MIT. Take it, break it, make it better.
