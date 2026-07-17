@@ -1,9 +1,9 @@
 # Notification configuration for mobile-terminal-ops
 # Copy this to config/notify-config and fill in your values.
-# notify-config is gitignored — your topic name stays private.
+# notify-config is gitignored — your topic/auth stays private.
 
 # ── Required ──────────────────────────────────
-# ntfy.sh topic name (pick something unique, like "hunt-<random>")
+# ntfy.sh topic name (pick something unique)
 # Install the ntfy app on your phone and subscribe to this topic.
 NTFY_TOPIC=""
 
