@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://github.com/mohkashoo/mobile-terminal-ops/raw/master/.github/social-preview.png" alt="Mobile Terminal Ops">
+</p>
+
 # Mobile Terminal Ops
 
 **Turn your Android phone into a full remote pentest workstation — zero open ports, persistent tmux sessions, opencode integration, and one-tap reconnect.**
