@@ -122,7 +122,7 @@ cd mobile-terminal-ops
 bash setup/server-setup.sh
 ```
 
-Both scripts are fully automated — they install packages, generate SSH keys, harden permissions, and configure everything.
+Both scripts handle installs, key generation, permissions, and config — but they'll ask before overwriting anything and back up your existing files first. Run with `--dry-run` to preview, or `--force` to skip prompts.
 
 ### 3. Connect and go
 
