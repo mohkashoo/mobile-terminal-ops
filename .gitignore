@@ -1,0 +1,23 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Secrets (should never be committed)
+**/hub.txt
+**/token*
+**/secret*
+*.pem
+*.key
+
+# Runtime
+__pycache__/
+*.pyc

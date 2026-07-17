@@ -1,0 +1,32 @@
+# SSH Config Template — Copy to ~/.ssh/config on Termux
+#
+# Usage:
+#   cat config/ssh-config >> ~/.ssh/config
+#   (then edit HostName to your server's Tailscale IP)
+
+Host hunt
+    HostName 100.68.188.37        # ← CHANGE THIS to your server's Tailscale IP
+    User kashoo                   # ← CHANGE THIS to your server username
+    IdentityFile ~/.ssh/id_ed25519
+    Port 22
+
+    # Keep connection alive
+    ServerAliveInterval 30
+    ServerAliveCountMax 3
+    TCPKeepAlive yes
+
+    # Connection multiplexing — reuse connection for faster reconnects
+    ControlMaster auto
+    ControlPath ~/.ssh/controlmasters/%r@%h:%p
+    ControlPersist 10m
+
+    # Accept new host keys automatically (safe on Tailscale mesh)
+    StrictHostKeyChecking accept-new
+
+    # Forward agent if needed (e.g., for git from phone)
+    # ForwardAgent yes
+
+# Catch-all for any *.tailscale host
+Host *.tailscale
+    StrictHostKeyChecking accept-new
+    IdentityFile ~/.ssh/id_ed25519
