@@ -107,7 +107,7 @@ sudo tailscale up
 # Log into the same Tailscale account on both
 ```
 
-After that, run `tailscale ip -4` on your server and write down the IP. It'll look like `100.x.x.x`.
+After that, run `tailscale ip -4` on your server and write down the IP. It'll look like `100.x.x.x`. You'll also need your server **username** — run `whoami` to get it.
 
 ### Step 2: Enable SSH on your server
 
