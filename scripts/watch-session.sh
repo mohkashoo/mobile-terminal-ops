@@ -1,23 +1,18 @@
 #!/usr/bin/env bash
-# Watch a tmux pane and send notifications to your phone.
+# Watch a tmux pane and send email summaries for every opencode response.
 # Launched by tmux-session.sh --notify (or run standalone).
 #
 # Usage:
-#   bash watch-session.sh [--target hunt:0.0] [--config path/to/config]
+#   bash watch-session.sh --target /hunt/paypal:0.0
 #
-# Modes (set NOTIFY_MODE in config):
-#   all     — every new output from opencode is sent to Telegram
-#   keyword — only send on keyword matches (default)
-#
-# Detects in all modes:
-#   1. Stall — pane output hasn't changed for > STALL_TIMEOUT seconds
-#   2. Session gone — tmux session/pane no longer exists
+# For every output change in the pane, it calls email-summary.sh which
+# sends a styled HTML email with the response content.
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-NOTIFY_SCRIPT="$SCRIPT_DIR/notify.sh"
+EMAIL_SCRIPT="$SCRIPT_DIR/email-summary.sh"
 LOG_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/mobile-terminal-ops"
 LOG_FILE="$LOG_DIR/watch-session.log"
 PID_FILE="$LOG_DIR/watch-session.pid"
@@ -33,18 +28,16 @@ log() {
 TMUX_TARGET="hunt:0.0"
 POLL_INTERVAL=10
 STALL_TIMEOUT=120
-COOLDOWN=300
-KEYWORDS=""
-NOTIFY_MODE="keyword"
+OUTPUT_COOLDOWN=15
 
-# ── Load config ───────────────────────────────
-CONFIG_PATH="${NOTIFY_CONFIG:-}"
+# ── Load email config ────────────────────────
+CONFIG_PATH="${EMAIL_CONFIG:-}"
 
 if [ -z "$CONFIG_PATH" ]; then
-    if [ -f "$PROJECT_DIR/config/notify-config" ]; then
-        CONFIG_PATH="$PROJECT_DIR/config/notify-config"
-    elif [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/mobile-terminal-ops/notify-config" ]; then
-        CONFIG_PATH="${XDG_CONFIG_HOME:-$HOME/.config}/mobile-terminal-ops/notify-config"
+    if [ -f "$PROJECT_DIR/config/email-config" ]; then
+        CONFIG_PATH="$PROJECT_DIR/config/email-config"
+    elif [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/mobile-terminal-ops/email-config" ]; then
+        CONFIG_PATH="${XDG_CONFIG_HOME:-$HOME/.config}/mobile-terminal-ops/email-config"
     fi
 fi
 
@@ -60,29 +53,21 @@ while [[ $# -gt 0 ]]; do
         --config) CONFIG_PATH="$2"; shift 2 ;;
         --poll) POLL_INTERVAL="$2"; shift 2 ;;
         --stall) STALL_TIMEOUT="$2"; shift 2 ;;
-        --cool) COOLDOWN="$2"; shift 2 ;;
-        --mode) NOTIFY_MODE="$2"; shift 2 ;;
+        --cool) OUTPUT_COOLDOWN="$2"; shift 2 ;;
         --verbose) set -x; shift ;;
         --help|-h)
-            echo "Usage: $0 [--target tmux:win.pane] [--config path] [--poll N] [--stall N] [--cool N] [--mode all|keyword]"
+            echo "Usage: $0 [--target tmux:win.pane] [--config path] [--poll N] [--stall N] [--cool N]"
             exit 0 ;;
         *) shift ;;
     esac
 done
 
-# Check backend is configured
-NTFY_TOPIC="${NTFY_TOPIC:-}"
-PUSHOVER_USER="${PUSHOVER_USER:-}"
-PUSHOVER_TOKEN="${PUSHOVER_TOKEN:-}"
-TG_BOT="${TG_BOT:-}"
-TG_CHAT="${TG_CHAT:-}"
-
-if [ -z "$TG_BOT$TG_CHAT$NTFY_TOPIC$PUSHOVER_USER" ]; then
-    log "No notification backend configured. Skipping."
+if [ -z "${EMAIL_TO:-}" ]; then
+    log "EMAIL_TO not configured. Skipping."
     exit 0
 fi
 
-log "Mode: $NOTIFY_MODE | Bot: telegram (TG_BOT configured)"
+log "Starting watcher for $TMUX_TARGET → email to $EMAIL_TO"
 
 # ── Single-instance guard ─────────────────────
 if [ -f "$PID_FILE" ]; then
@@ -96,22 +81,12 @@ fi
 echo "$$" > "$PID_FILE"
 trap 'rm -f "$PID_FILE"; log "Watcher stopped (PID $$)"' EXIT
 
-log "Starting watcher for $TMUX_TARGET (poll=${POLL_INTERVAL}s, mode=$NOTIFY_MODE)"
-
 # ── State tracking ────────────────────────────
 LAST_OUTPUT=""
 LAST_CHANGE_TS=$(date +%s)
 LAST_ALERT_STALL=0
 LAST_ALERT_GONE=0
-LAST_ALERT_OUTPUT=0
-
-alert() {
-    local title="$1"
-    local msg="$2"
-    local pri="${3:-3}"
-    log "ALERT: $title (pri=$pri)"
-    bash "$NOTIFY_SCRIPT" "$title" "$msg" "$pri" 2>/dev/null || true
-}
+LAST_ALERT_EMAIL=0
 
 get_pane_output() {
     tmux capture-pane -t "$TMUX_TARGET" -p -S -50 2>/dev/null || echo ""
@@ -129,8 +104,22 @@ now() {
     date +%s
 }
 
-clean_output() {
-    echo "$1" | head -30
+send_email_summary() {
+    local output="$1"
+    local event_type="$2"
+    local subject_prefix=""
+    case "$event_type" in
+        output)   subject_prefix="🔍 Opencode Response" ;;
+        stall)    subject_prefix="⏳ Session Stalled" ;;
+        ended)    subject_prefix="🚨 Session Ended" ;;
+        started)  subject_prefix="🤖 Watcher Started" ;;
+    esac
+    log "Sending email: $subject_prefix (${#output} chars)"
+    echo "$output" | bash "$EMAIL_SCRIPT" \
+        --to "$EMAIL_TO" \
+        --subject "$subject_prefix" \
+        --source "$TMUX_TARGET" \
+        2>/dev/null || log "Email send failed"
 }
 
 # ── Main loop ─────────────────────────────────
@@ -139,8 +128,8 @@ log "Watcher started (PID $$)"
 
 while true; do
     if ! pane_exists; then
-        if [ $(( $(now) - LAST_ALERT_GONE )) -gt "$COOLDOWN" ]; then
-            alert "🚨 Session Ended" "tmux session $TMUX_TARGET is gone" 5
+        if [ $(( $(now) - LAST_ALERT_GONE )) -gt "$OUTPUT_COOLDOWN" ]; then
+            send_email_summary "tmux session $TMUX_TARGET is gone" "ended"
             LAST_ALERT_GONE=$(now)
         fi
         sleep "$POLL_INTERVAL"
@@ -156,47 +145,29 @@ while true; do
         echo "$CURRENT_OUTPUT" > "$STATE_FILE"
         log "First run — captured initial pane state (${#CURRENT_OUTPUT} chars)"
         FIRST_RUN=false
-        # On first run with mode=all, send a "watcher started" message
-        if [ "$NOTIFY_MODE" = "all" ]; then
-            alert "🤖 Watcher Started" "Monitoring $TMUX_TARGET — every opencode response will be forwarded here." 3
-        fi
+        send_email_summary "Monitoring $TMUX_TARGET — every opencode response will be emailed here." "started"
         sleep "$POLL_INTERVAL"
         continue
     fi
 
-        # ── Output changed? ─────────────────────
+    # ── Output changed? ─────────────────────
     if [ "$CURRENT_OUTPUT" != "$LAST_OUTPUT" ]; then
         LAST_OUTPUT="$CURRENT_OUTPUT"
         LAST_CHANGE_TS=$NOW
         echo "$CURRENT_OUTPUT" > "$STATE_FILE"
 
-        # ── Mode: all — send every new output ──
-        if [ "$NOTIFY_MODE" = "all" ] && [ $(( NOW - LAST_ALERT_OUTPUT )) -gt 5 ]; then
-            MESSAGE=$(clean_output "$CURRENT_OUTPUT")
-            if [ ${#MESSAGE} -gt 3500 ]; then
-                MESSAGE="${MESSAGE:0:3500}..."
-            fi
-            TIMESTAMP=$(date '+%H:%M:%S')
-            alert "🔔 [$TIMESTAMP] opencode" "$MESSAGE" 3
-            LAST_ALERT_OUTPUT=$NOW
-        fi
-
-        # ── Mode: keyword — only check keywords ──
-        if [ "$NOTIFY_MODE" = "keyword" ] && [ -n "$KEYWORDS" ]; then
-            MATCHES=$(echo "$CURRENT_OUTPUT" | grep -iE "$KEYWORDS" 2>/dev/null || true)
-            if [ -n "$MATCHES" ] && [ $(( NOW - LAST_ALERT_OUTPUT )) -gt "$COOLDOWN" ]; then
-                FIRST_MATCH=$(echo "$MATCHES" | head -1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | cut -c1-120)
-                log "Keyword triggered: $FIRST_MATCH"
-                alert "⚠️ Keyword Match" "$FIRST_MATCH" 4
-                LAST_ALERT_OUTPUT=$NOW
-            fi
+        # Send email with the new output (debounced)
+        if [ $(( NOW - LAST_ALERT_EMAIL )) -gt "$OUTPUT_COOLDOWN" ]; then
+            MESSAGE=$(echo "$CURRENT_OUTPUT" | head -30)
+            send_email_summary "$MESSAGE" "output"
+            LAST_ALERT_EMAIL=$NOW
         fi
     else
         # ── Output unchanged — check for stall ──
         STALL_SECONDS=$(( NOW - LAST_CHANGE_TS ))
-        if [ "$STALL_SECONDS" -ge "$STALL_TIMEOUT" ] && [ $(( NOW - LAST_ALERT_STALL )) -gt "$COOLDOWN" ]; then
+        if [ "$STALL_SECONDS" -ge "$STALL_TIMEOUT" ] && [ $(( NOW - LAST_ALERT_STALL )) -gt "$OUTPUT_COOLDOWN" ]; then
             log "Stall detected: ${STALL_SECONDS}s"
-            alert "⏳ Stalled" "No output for ${STALL_SECONDS}s — waiting for input?" 3
+            send_email_summary "No output for ${STALL_SECONDS}s — opencode is waiting for input." "stall"
             LAST_ALERT_STALL=$NOW
         fi
     fi

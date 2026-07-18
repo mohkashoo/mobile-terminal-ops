@@ -13,7 +13,7 @@
 # Usage:
 #   bash tmux-session.sh                 # Create/attach hunt session
 #   bash tmux-session.sh recon           # Create/attach named session
-#   bash tmux-session.sh --notify        # With notification watcher
+#   bash tmux-session.sh --notify        # With email summary watcher
 #   bash tmux-session.sh --notify recon  # Named session + watcher
 
 set -euo pipefail

@@ -18,8 +18,12 @@ Thumbs.db
 *.pem
 *.key
 
-# Notification config (contains ntfy topic name — treat as semi-private)
-config/notify-config
+# Email config (contains SMTP credentials)
+config/email-config
+
+# Email queue (fallback when no MTA is available)
+email-queue/
+config/email-config
 
 # Runtime
 __pycache__/

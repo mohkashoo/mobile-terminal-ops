@@ -1,0 +1,42 @@
+# Email summary configuration for mobile-terminal-ops
+# Copy to config/email-config and fill in your values (gitignored).
+#
+# Delivery method priority: curl SMTP > sendmail > mail
+
+# ── Required ──────────────────────────────────────────
+# Your email address — every opencode response gets emailed here
+EMAIL_TO=""
+
+# ── Option A: SMTP via curl (most reliable, recommended) ──
+#
+# Gmail (requires 2FA + app password):
+#   1. https://myaccount.google.com/security → enable 2FA
+#   2. https://myaccount.google.com/apppasswords → generate one
+#   3. Fill in below (app password WITHOUT spaces):
+#
+# SMTP_URL="smtps://smtp.gmail.com:465"
+# SMTP_USER="you@gmail.com"
+# SMTP_PASS="your16charapppassword"
+#
+# Outlook / Office 365:
+# SMTP_URL="smtp://smtp.office365.com:587"
+# SMTP_USER="you@outlook.com"
+# SMTP_PASS="your-password"
+
+# ── Option B: sendmail (postfix, etc.) ──────────────
+# If your server can already send outbound email via
+# /usr/sbin/sendmail, nothing extra is needed here.
+
+# ── Option C: local mail command (bsd-mailx) ─────────
+# Works for local delivery. For external delivery, your
+# MTA must be configured for relaying.
+
+# ── Optional ─────────────────────────────────────────
+EMAIL_FROM=""
+
+# ── Watcher Defaults ─────────────────────────────────
+# These can be overridden via CLI flags:
+#   --poll N   --stall N   --cool N
+POLL_INTERVAL=4
+STALL_TIMEOUT=120
+OUTPUT_COOLDOWN=15

@@ -86,11 +86,11 @@ mobile-terminal-ops/
 │   ├── connect.sh            # Smart reconnect wrapper
 │   ├── sync-clipboard.sh     # Clipboard bridge
 │   ├── tmux-session.sh       # 3-pane tmux layout
-│   ├── notify.sh             # Push alerts to phone (ntfy/Pushover)
-│   └── watch-session.sh      # Watch tmux pane for stalls/keywords
+│   ├── email-summary.sh      # Styled HTML email sender
+│   └── watch-session.sh      # Watch tmux pane → email summaries
 ├── config/
 │   ├── ssh-config            # SSH config template
-│   ├── notify-config.example # Notification settings template
+│   ├── email-config.example  # Email settings template
 │   └── tailscale-hardening.md
 └── .gitignore
 ```
@@ -208,111 +208,76 @@ See `scripts/sync-clipboard.sh` if you want automated clipboard polling.
 
 ---
 
-## Notifications — Telegram Alerts
+## Email Summaries — Every Opencode Response in Your Inbox
 
-**The problem:** You disconnect from your SSH session (train, dead wifi, whatever). opencode finds something interesting or gets stuck waiting for you. You have no idea until you manually reconnect and check.
+**The problem:** You disconnect from SSH (train, dead wifi). opencode finishes a scan or finds something. You have no idea until you reconnect.
 
-**The fix:** `watch-session.sh` runs on the server alongside tmux. It watches your opencode pane and pushes a notification to your phone when something happens.
+**The fix:** `watch-session.sh` watches your opencode pane and emails a styled summary for every response.
 
-### Two modes
+### What triggers an email
 
-| Mode | `NOTIFY_MODE` | Behavior |
-|---|---|---|
-| **Forward all output** (default) | `all` | Every new line from opencode is sent to Telegram in real time — you read the hunt on your phone |
-| **Keyword-only** | `keyword` | Only alerts on pattern matches (CRITICAL, BUG, ERROR, etc.) and stall/session events |
-
-**Recommended:** `all`. You'll see every opencode response on your phone as it happens. The 5-second cooldown prevents spam during rapid output.
-
-### What triggers an alert
-
-| Trigger | Mode | Threshold |
-|---|---|---|
-| **New output** | `all` | Every poll where output changes (debounced 5s) |
-| **Stalled output** | both | 120s of no output change |
-| **Session ended** | both | Immediate |
-| **Keyword match** | `keyword` | Configurable regex |
+| Trigger | When |
+|---|---|
+| **New output** | Every time the pane content changes (debounced 15s) |
+| **Watcher started** | When you launch the watcher |
+| **Session stalled** | 120s of no output — opencode is waiting for you |
+| **Session ended** | tmux pane or session dies |
 
 ### How it works
 
 ```
 tmux pane → watch-session.sh (polls every 4s)
                 │
-                ├─ all mode ──→ diff new lines → notify.sh ──→ Your phone
-                │
-                ├─ keyword mode ──→ match regex → notify.sh ──→ Your phone
-                ├─ Output frozen? → count seconds → alert on stall
-                └─ Pane gone?     → alert immediately
-                │
-                ▼
-         notify.sh ──→ Telegram (recommended)
-                           │
-                           ▼
-                    Your phone buzzes
+                ├─ output changed? → email-summary.sh ──→ Styled HTML email
+                ├─ frozen?         → email-summary.sh ──→ "Stalled" alert
+                └─ pane gone?      → email-summary.sh ──→ "Session ended"
 ```
 
-### Setup — Telegram (recommended, 3 minutes)
+Each email is formatted with a dark terminal theme, monospace font, timestamp, and session context — readable on any phone's email app.
 
-1. **Create a Telegram bot:**
-   - Open Telegram, search for `@BotFather`
-   - Send `/newbot`, pick a name (e.g. `hunt-bot`)
-   - Save the bot token it gives you (looks like `123456:ABCdef...`)
+### Setup (2 minutes)
 
-2. **Get your chat ID:**
-   - Start a chat with your new bot, send any message
-   - Run this (replace TOKEN with yours):
-     ```bash
-     curl -s "https://api.telegram.org/bot<TOKEN>/getUpdates" | jq .result[0].message.chat.id
-     ```
-   - Save the number it returns
-
-3. **Configure on your server:**
+1. **Configure email delivery:**
 
 ```bash
 cd mobile-terminal-ops
-cp config/notify-config.example config/notify-config
-nano config/notify-config
-# Uncomment TG_BOT and TG_CHAT, paste your values
+cp config/email-config.example config/email-config
+nano config/email-config
 ```
 
-4. **Test it:**
+Set `EMAIL_TO` to your email address. For Gmail delivery, also set `SMTP_URL`, `SMTP_USER`, and `SMTP_PASS` (Gmail app password — generate one at https://myaccount.google.com/apppasswords).
+
+2. **Test it:**
 
 ```bash
-bash scripts/notify.sh --telegram-bot <TOKEN> --telegram-chat <ID> "Test" "Phone should buzz" 4
+echo "Test output from opencode" | bash scripts/email-summary.sh --to you@example.com --subject "Test"
 ```
 
-5. **Launch with notifications:**
+3. **Launch with email summaries:**
 
 ```bash
-bash scripts/tmux-session.sh --notify
+bash scripts/watch-session.sh --target /hunt/paypal:0.0 --poll 4
 ```
 
-Disconnect from SSH. If opencode stalls or finds a keyword match, your Telegram bot messages you.
+### Delivery methods (auto-detected)
+
+| Method | Config | Notes |
+|---|---|---|
+| **curl SMTP** (best) | `SMTP_URL`, `SMTP_USER`, `SMTP_PASS` | Works with Gmail, Outlook, any SMTP |
+| **sendmail** | (none) | Uses postfix or other local MTA |
+| **mail command** | (none) | Local delivery fallback |
+
+If none of these work, the email is saved to `email-queue/` in the project directory.
 
 ### Tuning
 
-Edit `config/notify-config` on the server to adjust:
+Edit `config/email-config`:
 
 | Variable | Default | What it does |
 |---|---|---|
-| `NOTIFY_MODE` | `all` | `all` = forward every opencode response, `keyword` = only match patterns |
-| `POLL_INTERVAL` | `4` | Seconds between pane checks (lower = faster alerts, higher = less CPU) |
+| `POLL_INTERVAL` | `4` | Seconds between pane checks |
 | `STALL_TIMEOUT` | `120` | Seconds of silence before "stalled" alert |
-| `COOLDOWN` | `5` | Minimum seconds between output alerts in `all` mode |
-| `KEYWORDS` | (regex) | Pipe-separated patterns; only used in `keyword` mode |
-
-### Other backends
-
-| Backend | Config Fields | Notes |
-|---|---|---|
-| **Telegram** (recommended) | `TG_BOT`, `TG_CHAT` | Free, reliable, push notifications on both Android & iOS |
-| Pushover | `PUSHOVER_USER`, `PUSHOVER_TOKEN` | $5 one-time, reliable |
-| ntfy.sh | `NTFY_TOPIC` | Free, no account needed, can be flaky |
-
-The backend priority is: Telegram > Pushover > ntfy. If Telegram is configured, it's used. If not, falls back to Pushover, then ntfy.
-
-### Degrades gracefully
-
-If `config/notify-config` doesn't exist or `NTFY_TOPIC` is empty, `watch-session.sh` skips silently. No alerts, no errors. Everything else still works.
+| `OUTPUT_COOLDOWN` | `15` | Minimum seconds between emails |
 
 ---
 
@@ -337,11 +302,11 @@ SSH wrapper that retries 3 times, carries your clipboard, and reattaches to tmux
 ### `scripts/sync-clipboard.sh`
 Bidirectional clipboard sync. Pushes/pulls between phone and server via SSH.
 
-### `scripts/notify.sh`
-Sends push notifications to your phone via **Telegram** (recommended), Pushover, or ntfy.sh. Backend priority: Telegram > Pushover > ntfy. Call standalone: `bash notify.sh --telegram-bot TOKEN --telegram-chat ID "Title" "Message" 4`.
+### `scripts/email-summary.sh`
+Reads opencode output from stdin and sends a styled HTML email to your configured address. Supports three delivery methods: curl SMTP (recommended), sendmail, and mail command. Auto-formats the output with a dark terminal theme. Standalone: `echo "output" | bash scripts/email-summary.sh --to you@example.com --subject "Summary"`.
 
 ### `scripts/watch-session.sh`
-Watches a tmux pane and pushes notifications to your phone. **Two modes:** `all` forwards every opencode response as it happens; `keyword` only alerts on pattern matches. Also detects stalls (120s of silence) and session crashes. Launched automatically by `tmux-session.sh --notify`. Reads `config/notify-config`.
+Watches a tmux pane and emails styled summaries for every opencode response. Detects output changes (forwards immediately), stalls (120s of silence), and session crashes. Reads `config/email-config`.
 
 ### `scripts/tmux-session.sh`
 Opens a tmux workspace with three panes. Pass `--notify` to also launch the notification watcher in the background.
