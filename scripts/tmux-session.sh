@@ -37,7 +37,6 @@ mkdir -p "$WORKSPACE_DIR"
 
 if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
     if [ "$NOTIFY" = true ]; then
-        # Launch watcher in background
         bash "$SCRIPT_DIR/watch-session.sh" --target "${SESSION_NAME}:0.0" &
     fi
     exec tmux attach-session -t "$SESSION_NAME"

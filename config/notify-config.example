@@ -1,34 +1,35 @@
 # Notification configuration for mobile-terminal-ops
 # Copy this to config/notify-config and fill in your values.
-# notify-config is gitignored — your topic/auth stays private.
+# notify-config is gitignored — your tokens stay private.
+#
+# Backend priority (first configured wins): Telegram > Pushover > ntfy
 
-# ── Required ──────────────────────────────────
-# ntfy.sh topic name (pick something unique)
-# Install the ntfy app on your phone and subscribe to this topic.
-NTFY_TOPIC=""
+# ── Option A: Telegram (recommended) ──────────
+# 1. Open Telegram, search @BotFather, send /newbot
+# 2. Pick a name, get your bot token (looks like 123456:ABC-DEF1234...)
+# 3. Start a chat with your bot, send any message
+# 4. Run: curl -s "https://api.telegram.org/bot<TOKEN>/getUpdates" | jq .result[0].message.chat.id
+# 5. Put the chat ID below
+# TG_BOT=""
+# TG_CHAT=""
 
-# ── Optional: Pushover (alternative to ntfy) ──
-# If set, notifications go to Pushover instead of ntfy.
+# ── Option B: Pushover ────────────────────────
 # Get these from https://pushover.net
 # PUSHOVER_USER=""
 # PUSHOVER_TOKEN=""
 
+# ── Option C: ntfy.sh ─────────────────────────
+# Install the ntfy app on your phone, subscribe to a unique topic.
+# NTFY_TOPIC=""
+
 # ── Alert Thresholds (seconds) ────────────────
-# How long of no output before we alert "stalled"
 STALL_TIMEOUT=120
-
-# How long to wait between identical alerts (debounce)
 COOLDOWN=300
-
-# How often to check pane output (seconds)
 POLL_INTERVAL=10
 
 # ── Keyword Alerts ────────────────────────────
-# Pipe-separated regex patterns. If new output matches any,
-# an alert fires. Leave empty to disable.
+# Pipe-separated regex patterns. Leave empty to disable.
 KEYWORDS="CRITICAL|vulnerability found|interesting|ERROR|BUG|found|admin"
 
 # ── tmux Target ───────────────────────────────
-# Which tmux session/window/pane to watch
-# Format: session:window.pane  (e.g. "hunt:0.0" for first pane)
 TMUX_TARGET="hunt:0.0"

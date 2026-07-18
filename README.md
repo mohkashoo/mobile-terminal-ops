@@ -208,7 +208,7 @@ See `scripts/sync-clipboard.sh` if you want automated clipboard polling.
 
 ---
 
-## Notifications (Phone Alerts)
+## Notifications — Telegram Alerts
 
 **The problem:** You disconnect from your SSH session (train, dead wifi, whatever). opencode finds something interesting or gets stuck waiting for you. You have no idea until you manually reconnect and check.
 
@@ -238,18 +238,34 @@ tmux pane → watch-session.sh (polls every 10s)
                      Your phone buzzes
 ```
 
-### Setup (2 minutes)
+### Setup — Telegram (recommended, 3 minutes)
 
-1. **Install the ntfy app** on your phone (Android Play Store / iOS App Store)
-2. **Pick a topic name** — anything unique, like `hunt-<random-letters>`
-3. **Subscribe to that topic** in the ntfy app
-4. **Configure on your server:**
+1. **Create a Telegram bot:**
+   - Open Telegram, search for `@BotFather`
+   - Send `/newbot`, pick a name (e.g. `hunt-bot`)
+   - Save the bot token it gives you (looks like `123456:ABCdef...`)
+
+2. **Get your chat ID:**
+   - Start a chat with your new bot, send any message
+   - Run this (replace TOKEN with yours):
+     ```bash
+     curl -s "https://api.telegram.org/bot<TOKEN>/getUpdates" | jq .result[0].message.chat.id
+     ```
+   - Save the number it returns
+
+3. **Configure on your server:**
 
 ```bash
 cd mobile-terminal-ops
 cp config/notify-config.example config/notify-config
 nano config/notify-config
-# Set NTFY_TOPIC to whatever you picked
+# Uncomment TG_BOT and TG_CHAT, paste your values
+```
+
+4. **Test it:**
+
+```bash
+bash scripts/notify.sh --telegram-bot <TOKEN> --telegram-chat <ID> "Test" "Phone should buzz" 4
 ```
 
 5. **Launch with notifications:**
@@ -258,7 +274,7 @@ nano config/notify-config
 bash scripts/tmux-session.sh --notify
 ```
 
-That's it. Disconnect from SSH — if opencode stalls or finds something, your phone buzzes.
+Disconnect from SSH. If opencode stalls or finds a keyword match, your Telegram bot messages you.
 
 ### Tuning
 
@@ -269,9 +285,15 @@ Edit `config/notify-config` to adjust:
 - `KEYWORDS` — pipe-separated regex patterns for interesting output
 - `POLL_INTERVAL` — how often to check the pane (default: 10)
 
-### Pushover (optional)
+### Other backends
 
-If you already use Pushover, set `PUSHOVER_USER` and `PUSHOVER_TOKEN` in the config instead of `NTFY_TOPIC`. When both are set, Pushover takes priority.
+| Backend | Config Fields | Notes |
+|---|---|---|
+| **Telegram** (recommended) | `TG_BOT`, `TG_CHAT` | Free, reliable, push notifications on both Android & iOS |
+| Pushover | `PUSHOVER_USER`, `PUSHOVER_TOKEN` | $5 one-time, reliable |
+| ntfy.sh | `NTFY_TOPIC` | Free, no account needed, can be flaky |
+
+The backend priority is: Telegram > Pushover > ntfy. If Telegram is configured, it's used. If not, falls back to Pushover, then ntfy.
 
 ### Degrades gracefully
 
@@ -301,7 +323,7 @@ SSH wrapper that retries 3 times, carries your clipboard, and reattaches to tmux
 Bidirectional clipboard sync. Pushes/pulls between phone and server via SSH.
 
 ### `scripts/notify.sh`
-Sends a notification to your phone via ntfy.sh (default, no account needed) or Pushover. Called by `watch-session.sh`. Can also be used standalone: `bash notify.sh "Title" "Message" 4`.
+Sends push notifications to your phone via **Telegram** (recommended), Pushover, or ntfy.sh. Backend priority: Telegram > Pushover > ntfy. Call standalone: `bash notify.sh --telegram-bot TOKEN --telegram-chat ID "Title" "Message" 4`.
 
 ### `scripts/watch-session.sh`
 Watches a tmux pane and alerts your phone when: the pane stalls (no output change for N seconds), the session dies, or output matches a keyword pattern. Launched automatically by `tmux-session.sh --notify`. Reads config from `config/notify-config`.
