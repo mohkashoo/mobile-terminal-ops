@@ -214,28 +214,40 @@ See `scripts/sync-clipboard.sh` if you want automated clipboard polling.
 
 **The fix:** `watch-session.sh` runs on the server alongside tmux. It watches your opencode pane and pushes a notification to your phone when something happens.
 
+### Two modes
+
+| Mode | `NOTIFY_MODE` | Behavior |
+|---|---|---|
+| **Forward all output** (default) | `all` | Every new line from opencode is sent to Telegram in real time — you read the hunt on your phone |
+| **Keyword-only** | `keyword` | Only alerts on pattern matches (CRITICAL, BUG, ERROR, etc.) and stall/session events |
+
+**Recommended:** `all`. You'll see every opencode response on your phone as it happens. The 5-second cooldown prevents spam during rapid output.
+
 ### What triggers an alert
 
-| Trigger | Example | Default Threshold |
+| Trigger | Mode | Threshold |
 |---|---|---|
-| **Stalled output** | opencode is waiting for your input and you're disconnected | 120s of no output change |
-| **Session ended** | opencode crashed, completed, or tmux pane died | Immediate |
-| **Keyword match** | Output contains "CRITICAL", "vulnerability found", or your custom patterns | Configurable regex list |
+| **New output** | `all` | Every poll where output changes (debounced 5s) |
+| **Stalled output** | both | 120s of no output change |
+| **Session ended** | both | Immediate |
+| **Keyword match** | `keyword` | Configurable regex |
 
 ### How it works
 
 ```
-tmux pane → watch-session.sh (polls every 10s)
+tmux pane → watch-session.sh (polls every 4s)
                 │
-                ├─ Output changed? → check keywords → alert on match
-                ├─ Output frozen?  → count seconds → alert on stall
-                └─ Pane gone?      → alert immediately
+                ├─ all mode ──→ diff new lines → notify.sh ──→ Your phone
+                │
+                ├─ keyword mode ──→ match regex → notify.sh ──→ Your phone
+                ├─ Output frozen? → count seconds → alert on stall
+                └─ Pane gone?     → alert immediately
                 │
                 ▼
-         notify.sh ──→ ntfy.sh (default) or Pushover
-                            │
-                            ▼
-                     Your phone buzzes
+         notify.sh ──→ Telegram (recommended)
+                           │
+                           ▼
+                    Your phone buzzes
 ```
 
 ### Setup — Telegram (recommended, 3 minutes)
@@ -278,12 +290,15 @@ Disconnect from SSH. If opencode stalls or finds a keyword match, your Telegram 
 
 ### Tuning
 
-Edit `config/notify-config` to adjust:
+Edit `config/notify-config` on the server to adjust:
 
-- `STALL_TIMEOUT` — seconds of silence before "stalled" alert (default: 120)
-- `COOLDOWN` — seconds between identical alerts (default: 300)
-- `KEYWORDS` — pipe-separated regex patterns for interesting output
-- `POLL_INTERVAL` — how often to check the pane (default: 10)
+| Variable | Default | What it does |
+|---|---|---|
+| `NOTIFY_MODE` | `all` | `all` = forward every opencode response, `keyword` = only match patterns |
+| `POLL_INTERVAL` | `4` | Seconds between pane checks (lower = faster alerts, higher = less CPU) |
+| `STALL_TIMEOUT` | `120` | Seconds of silence before "stalled" alert |
+| `COOLDOWN` | `5` | Minimum seconds between output alerts in `all` mode |
+| `KEYWORDS` | (regex) | Pipe-separated patterns; only used in `keyword` mode |
 
 ### Other backends
 
@@ -326,7 +341,7 @@ Bidirectional clipboard sync. Pushes/pulls between phone and server via SSH.
 Sends push notifications to your phone via **Telegram** (recommended), Pushover, or ntfy.sh. Backend priority: Telegram > Pushover > ntfy. Call standalone: `bash notify.sh --telegram-bot TOKEN --telegram-chat ID "Title" "Message" 4`.
 
 ### `scripts/watch-session.sh`
-Watches a tmux pane and alerts your phone when: the pane stalls (no output change for N seconds), the session dies, or output matches a keyword pattern. Launched automatically by `tmux-session.sh --notify`. Reads config from `config/notify-config`.
+Watches a tmux pane and pushes notifications to your phone. **Two modes:** `all` forwards every opencode response as it happens; `keyword` only alerts on pattern matches. Also detects stalls (120s of silence) and session crashes. Launched automatically by `tmux-session.sh --notify`. Reads `config/notify-config`.
 
 ### `scripts/tmux-session.sh`
 Opens a tmux workspace with three panes. Pass `--notify` to also launch the notification watcher in the background.

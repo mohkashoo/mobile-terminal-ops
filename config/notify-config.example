@@ -1,14 +1,17 @@
 # Notification configuration for mobile-terminal-ops
-# Copy this to config/notify-config and fill in your values.
-# notify-config is gitignored — your tokens stay private.
+# Copy to config/notify-config and fill in your values (gitignored).
 #
 # Backend priority (first configured wins): Telegram > Pushover > ntfy
+#
+# Modes:
+#   all     — every new output from opencode is forwarded to your phone
+#   keyword — only send alerts on pattern matches (CRITICAL, BUG, etc.)
 
 # ── Option A: Telegram (recommended) ──────────
 # 1. Open Telegram, search @BotFather, send /newbot
 # 2. Pick a name, get your bot token (looks like 123456:ABC-DEF1234...)
 # 3. Start a chat with your bot, send any message
-# 4. Run: curl -s "https://api.telegram.org/bot<TOKEN>/getUpdates" | jq .result[0].message.chat.id
+# 4. Run: curl -s "https://api.telegram.org/bot<TOKEN>/getUpdates" | jq '.result[0].message.chat.id'
 # 5. Put the chat ID below
 # TG_BOT=""
 # TG_CHAT=""
@@ -22,14 +25,19 @@
 # Install the ntfy app on your phone, subscribe to a unique topic.
 # NTFY_TOPIC=""
 
-# ── Alert Thresholds (seconds) ────────────────
-STALL_TIMEOUT=120
-COOLDOWN=300
-POLL_INTERVAL=10
+# ── Mode ──────────────────────────────────────
+# "all" = forward every opencode response
+# "keyword" = only keyword matches
+NOTIFY_MODE="all"
 
-# ── Keyword Alerts ────────────────────────────
-# Pipe-separated regex patterns. Leave empty to disable.
-KEYWORDS="CRITICAL|vulnerability found|interesting|ERROR|BUG|found|admin"
+# ── Timing (seconds) ──────────────────────────
+STALL_TIMEOUT=120
+COOLDOWN=5
+POLL_INTERVAL=4
+
+# ── Keywords (only used in "keyword" mode) ────
+# Pipe-separated regex patterns
+KEYWORDS="CRITICAL|vulnerability found|ERROR|BUG|found|admin"
 
 # ── tmux Target ───────────────────────────────
 TMUX_TARGET="hunt:0.0"

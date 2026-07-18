@@ -91,11 +91,15 @@ priority_emoji() {
 send_telegram() {
     local icon
     icon=$(priority_emoji "$PRIORITY")
-    local text="${icon} *${TITLE}*%0A%0A${MESSAGE}"
+    local text="${icon} ${TITLE}
+
+${MESSAGE}"
 
     curl -s -o /dev/null \
         "https://api.telegram.org/bot${TG_BOT}/sendMessage" \
-        -d "chat_id=${TG_CHAT}&text=${text}&parse_mode=Markdown&disable_web_page_preview=true"
+        --data-urlencode "chat_id=${TG_CHAT}" \
+        --data-urlencode "text=${text}" \
+        --data-urlencode "disable_web_page_preview=true"
     echo "Telegram alert sent"
 }
 
