@@ -242,7 +242,7 @@ if [ "$OS" = "linux" ]; then
             run sudo sed -i 's/^#\?ClientAliveCountMax.*/ClientAliveCountMax 3/' /etc/ssh/sshd_config
 
             if [ -f ~/.ssh/mto-ca.pub ]; then
-                if ! grep -q '^TrustedUserCAKeys' /etc/ssh/sshd_config; then
+                if ! grep -qE '^[[:space:]]*TrustedUserCAKeys' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf 2>/dev/null; then
                     run sudo bash -c "echo 'TrustedUserCAKeys $HOME/.ssh/mto-ca.pub' >> /etc/ssh/sshd_config"
                 fi
             else

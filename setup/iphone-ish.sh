@@ -67,6 +67,9 @@ if [ ! -f ~/.ssh/id_ed25519 ]; then
     ok "SSH key generated: ~/.ssh/id_ed25519.pub"
 else
     ok "SSH key already exists."
+    if [ -n "$(ssh-keygen -y -P '' -f ~/.ssh/id_ed25519 2>/dev/null)" ]; then
+        warn "Existing key has NO passphrase. Protect it: ssh-keygen -p -f ~/.ssh/id_ed25519"
+    fi
 fi
 
 info "Setting up SSH config..."

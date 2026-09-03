@@ -14,15 +14,30 @@ set -euo pipefail
 
 REMOTE_HOST="${1:-hunt}"
 
+# Detect the SERVER OS (not the phone's) so the stat syntax matches.
+server_os() {
+    ssh "$REMOTE_HOST" "uname -s" 2>/dev/null || echo "unknown"
+}
+
+show_heartbeat() {
+    case "$(server_os)" in
+        Linux) ssh "$REMOTE_HOST" "stat -c '%y' ~/.phone-heartbeat 2>/dev/null || echo 'no heartbeat yet'" ;;
+        *)     ssh "$REMOTE_HOST" "stat -f '%Sm' -t '%Y-%m-%d %H:%M:%S' ~/.phone-heartbeat 2>/dev/null || echo 'no heartbeat yet'" ;;
+    esac
+}
+
+update_heartbeat() {
+    case "$(server_os)" in
+        Linux) ssh "$REMOTE_HOST" "touch ~/.phone-heartbeat && stat -c 'heartbeat updated: %y' ~/.phone-heartbeat" ;;
+        *)     ssh "$REMOTE_HOST" "touch ~/.phone-heartbeat && stat -f 'heartbeat updated: %Sm' -t '%Y-%m-%d %H:%M:%S' ~/.phone-heartbeat" ;;
+    esac
+}
+
 case "${1:-}" in
-    --check)
-        ssh "$REMOTE_HOST" "stat -c '%y  (age: %y)' ~/.phone-heartbeat 2>/dev/null || echo 'no heartbeat yet'"
-        ;;
+    --check) show_heartbeat ;;
     --help|-h)
         echo "Usage: $0 [--check]"
         exit 0
         ;;
-    *)
-        ssh "$REMOTE_HOST" "touch ~/.phone-heartbeat && stat -c 'heartbeat updated: %y' ~/.phone-heartbeat"
-        ;;
+    *) update_heartbeat ;;
 esac

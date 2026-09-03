@@ -17,6 +17,9 @@
 set -euo pipefail
 
 REMOTE_HOST="hunt"
+# NOTE: the ~ must reach the REMOTE shell unquoted so it expands to the
+# remote user's home. Quoting it (as '$REMOTE_FILE') makes it a literal "~"
+# path and the sync silently becomes a no-op.
 REMOTE_FILE="~/.phone-clipboard"
 SYNC_LOG=~/clipboard-sync.log
 
@@ -71,14 +74,14 @@ push_to_server() {
         echo "Clipboard is empty."
         return
     fi
-    echo "$clip" | ssh "$REMOTE_HOST" "cat > '$REMOTE_FILE'"
+    echo "$clip" | ssh "$REMOTE_HOST" "cat > $REMOTE_FILE"
     echo "[$(date)] Pushed: ${clip:0:80}..." >> "$SYNC_LOG"
     ok "Pushed to server: ${clip:0:80}..."
 }
 
 pull_from_server() {
     local content
-    content=$(ssh "$REMOTE_HOST" "cat '$REMOTE_FILE' 2>/dev/null" || echo "")
+    content=$(ssh "$REMOTE_HOST" "cat $REMOTE_FILE 2>/dev/null" || echo "")
     if [ -z "$content" ]; then
         echo "Remote clipboard file is empty."
         return
@@ -95,7 +98,7 @@ watch_server() {
 
     while true; do
         local current
-        current=$(ssh "$REMOTE_HOST" "md5sum '$REMOTE_FILE' 2>/dev/null | cut -d' ' -f1" || echo "")
+        current=$(ssh "$REMOTE_HOST" "md5sum $REMOTE_FILE 2>/dev/null | cut -d' ' -f1" || echo "")
         if [ -n "$current" ] && [ "$current" != "$last_checksum" ]; then
             last_checksum="$current"
             pull_from_server

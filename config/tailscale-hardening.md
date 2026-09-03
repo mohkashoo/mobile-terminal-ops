@@ -57,8 +57,10 @@ can reach the tailnet normally.
 
 ### 1. ACL (only your phone can SSH, port 22 only)
 
-Create or edit your [ACL policy](https://login.tailscale.com/admin/acls) using
-`config/tailscale-acl.json` (written by the hardening script):
+Create or edit your [ACL policy](https://login.tailscale.com/admin/acls).
+The hardening script writes `config/tailscale-acl.json` with your real
+tailnet identity **auto-detected** (via `tailscale status --json`) — no
+placeholder to forget. If detection fails it prompts you. Example:
 
 ```json
 {
@@ -75,13 +77,15 @@ Create or edit your [ACL policy](https://login.tailscale.com/admin/acls) using
     }
   ],
   "tagOwners": {
-    "tag:phone":  ["you@github"],
-    "tag:server": ["you@github"]
+    "tag:phone":  ["you@github.com"],
+    "tag:server": ["you@github.com"]
   }
 }
 ```
 
-Change `you@github` in `tagOwners` to **your** tailnet identity.
+`tagOwners` must contain your **actual** tailnet login (what the script wrote
+into `config/tailscale-acl.json`). Verify before pasting: `tailscale status`
+shows your login name.
 
 ### 2. Add tags via CLI
 

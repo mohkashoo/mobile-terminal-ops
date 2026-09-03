@@ -4,7 +4,9 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
+  <img src="https://img.shields.io/badge/version-v2.0.0-blue" alt="Version 2.0.0">
   <img src="https://img.shields.io/badge/tested-Ubuntu%2024.04%20%7C%20macOS%2015%20%7C%20Termux%20%7C%20iSH%20%7C%20Blink-brightgreen" alt="Tested On">
+  <img src="https://img.shields.io/badge/ci-passing-brightgreen" alt="CI">
   <img src="https://img.shields.io/badge/shell-bash-lightgrey" alt="Shell">
 </p>
 
@@ -353,10 +355,10 @@ For Android (Termux). Installs packages, generates SSH key (**passphrase require
 First-class Tailscale hardening: 2FA on the account (admin console), **Tailnet Lock** via `tailscale lock init`, and an **SSH-only ACL** (phone→server:22). Writes the ACL template to `config/tailscale-acl.json`. See `config/tailscale-hardening.md`.
 
 ### `setup/install-auto-lock.sh`
-Installs the dead-man's switch: `~/.ssh/rc` updates a heartbeat on every Tailscale SSH login, and a systemd timer (or cron) runs `scripts/auto-lock-server.sh` hourly. No heartbeat for 24h → the phone key is revoked from `authorized_keys` automatically.
+Installs the dead-man's switch: `~/.ssh/rc` updates a heartbeat on every Tailscale SSH login, and a **system-level systemd timer** (survives reboots with no login session) — or cron — runs `scripts/auto-lock-server.sh` hourly. No heartbeat for 24h → the phone key is revoked from `authorized_keys` automatically. Run `scripts/auto-lock-server.sh --check-health` to verify the watchdog itself is alive.
 
 ### `setup/install-ssh-ca.sh`
-Creates a local SSH CA and tells sshd to trust it (`TrustedUserCAKeys`). Lets you sign the phone's key into **short-lived certificates** instead of permanent access.
+Creates a local SSH CA (verified non-empty-passphrase) and tells sshd to trust it (`TrustedUserCAKeys`, verified via `sshd -T`). Lets you sign the phone's key into **short-lived certificates** instead of permanent access.
 
 ### `setup/iphone-ish.sh`
 For iPhone (iSH app — Alpine Linux). Same idea as Termux but adapted for `apk` package manager. **Passphrase required** on the SSH key.
@@ -375,10 +377,10 @@ Bidirectional clipboard sync (push/pull/watch). Prints a plaintext-on-server war
 Phone-side helper that pokes the server's dead-man's-switch heartbeat (`--check` shows the last heartbeat). Automatic heartbeats happen on every SSH login via `~/.ssh/rc`.
 
 ### `scripts/auto-lock-server.sh`
-The dead-man's switch itself: if the phone heartbeat is older than `MAX_IDLE_HOURS` (default 24), removes the phone key from `~/.ssh/authorized_keys` and optionally kills open Tailscale SSH sessions. Run by `setup/install-auto-lock.sh`.
+The dead-man's switch itself: if the phone heartbeat is older than `MAX_IDLE_HOURS` (default 24) — or missing, unreadable, or future-dated — it removes the phone key from `~/.ssh/authorized_keys`. Fails closed on any ambiguity. `--check-health` reports whether the timer/cron is actually firing. Run by `setup/install-auto-lock.sh`.
 
 ### `scripts/sign-phone-key.sh`
-Signs the phone's public key into a certificate valid for `--hours` (default 48). Installs the cert in `authorized_keys`, prints the cert to save on the phone as `~/.ssh/id_ed25519-cert.pub`. When it expires, access is gone — re-sign to renew.
+Signs the phone's public key into a certificate valid for `--hours` (default 48). Installs the cert in `authorized_keys` (appended before the old raw key is removed by its key blob), prints the cert to save on the phone as `~/.ssh/id_ed25519-cert.pub`. When it expires, access is gone — re-sign to renew.
 
 ### `scripts/email-summary.sh`
 Reads opencode output from stdin and sends a styled HTML email to your configured address. **Redacts secrets by default**, supports gpg/age encryption of the full content, and refuses third-party SMTP unless `EMAIL_SMTP_OK="yes"`. Default transport is the local MTA. Standalone: `echo "output" | bash scripts/email-summary.sh --to you@example.com --subject "Summary"`.
@@ -479,6 +481,42 @@ in the Result column with your measured outcome.
 
 **If you run any of these and the "pass" column doesn't hold — that's a bug.
 Open an issue so it gets fixed.**
+
+### Watchdog health — how you'd notice the dead-man's switch died
+
+A dead-man's switch that silently stops functioning is worse than none,
+because it creates false confidence. The auto-lock is designed to fail
+**closed** (missing/stale/unreadable heartbeat → revoke), but nothing it
+controls can catch the scheduler itself never running. Check on it:
+
+```bash
+# One-liner that exits non-zero if the watchdog is dead or stale:
+~/.local/bin/mto-auto-lock.sh --check-health
+
+# What it reports:
+#   - last watchdog run timestamp (auto-lock-last-run) and whether it's stale
+#   - the systemd timer status (systemctl status mto-autolock.timer)
+#   - the cron entry, if any
+
+# Manual verification:
+systemctl status mto-autolock.timer     # system-level timer (runs headless)
+crontab -l | grep mto-auto-lock          # cron fallback
+ls -la ~/.local/share/mobile-terminal-ops/auto-lock.log   # log freshness
+```
+
+Things that kill the watchdog and how to catch them:
+
+| Failure | How you notice |
+|---|---|
+| Timer disabled after reboot / after a crash | `--check-health` shows "last run is older than MAX_IDLE_HOURS" |
+| `~/.ssh/rc` removed or rejected | heartbeats stop → the switch correctly fires and revokes the key (fail closed) — you'll see it on next connect |
+| Disk full / log unwritable | `auto-lock.log` stops growing; `--check-health` still reports last run |
+| Cron entry lost | `--check-health` shows no timer AND no cron line |
+| System clock jumped forward | a future-dated heartbeat is treated as stale → key revoked (fail closed) |
+
+The **first-run footgun**: the switch arms the moment you install it. If the
+phone does not SSH in within `MAX_IDLE_HOURS` of arming, the key is revoked.
+Log in once right after installing to set the heartbeat.
 
 Something breaks? Open an issue. Better yet, send a PR.
 

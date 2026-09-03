@@ -147,9 +147,30 @@ echo ""
 if [ "$DRY_RUN" = true ]; then
     warn "[DRY-RUN] Would write ACL policy template to config/tailscale-acl.json"
 else
+    # Detect the REAL tailnet identity so the ACL is a working control, not a
+    # placeholder template. Falls back to a prompt if detection fails.
+    DETECTED_IDENTITY=""
+    if command -v jq >/dev/null 2>&1 && tailscale status --json >/dev/null 2>&1; then
+        DETECTED_IDENTITY=$(tailscale status --json 2>/dev/null \
+            | jq -r '(.Self.UserID|tostring) as $id | .User[$id].LoginName // empty' 2>/dev/null)
+    fi
+    if [ -z "$DETECTED_IDENTITY" ] && tailscale status >/dev/null 2>&1; then
+        DETECTED_IDENTITY=$(tailscale status --json 2>/dev/null | grep -o '"LoginName":"[^"]*"' | head -1 | sed 's/.*:"\([^"]*\)"/\1/')
+    fi
+    if [ -n "$DETECTED_IDENTITY" ]; then
+        ok "Detected tailnet identity: $DETECTED_IDENTITY"
+    else
+        echo -en "${YELLOW}[?]${NC} Could not auto-detect your tailnet identity (e.g. you@github.com): "
+        read -r DETECTED_IDENTITY
+        if [ -z "$DETECTED_IDENTITY" ]; then
+            err "No identity given. ACL would stay a template — aborting."
+            exit 1
+        fi
+    fi
+
     mkdir -p "$(cd "$(dirname "$0")/.." && pwd)/config"
     ACL_FILE="$(cd "$(dirname "$0")/.." && pwd)/config/tailscale-acl.json"
-    cat > "$ACL_FILE" << 'ACL'
+    sed "s/you@github/${DETECTED_IDENTITY}/g" > "$ACL_FILE" << 'ACL'
 {
   "acls": [
     {
@@ -170,13 +191,12 @@ else
   "ssh": []
 }
 ACL
-    ok "Wrote ACL template → $ACL_FILE"
+    ok "Wrote ACL (with your identity filled in) → $ACL_FILE"
     echo ""
     info "Apply it (manual — admin console):"
     info "  1. https://login.tailscale.com/admin/acls"
     info "  2. Replace the policy with the contents of config/tailscale-acl.json"
-    info "  3. Change 'you@github' in tagOwners to YOUR tailnet identity"
-    info "  4. Tag your devices so the ACL applies:"
+    info "  3. Tag your devices so the ACL applies:"
     info "       server: sudo tailscale set --advertise-tags=tag:server"
     info "       phone:  tailscale set --advertise-tags=tag:phone"
     echo ""

@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [master, security-hardening]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Shell syntax check
+        run: |
+          set -e
+          for f in scripts/*.sh setup/*.sh; do
+            bash -n "$f"
+          done
+          echo "all scripts parse cleanly"
+
+      - name: Run test suite
+        run: bash tests/run-tests.sh

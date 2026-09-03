@@ -54,6 +54,15 @@ fi
 TMPDIR_SAFE=$(mktemp -d)
 echo "$KEY" > "$TMPDIR_SAFE/phone.pub"
 
+# Match the OLD raw key by its base64 blob, NOT the comment — the comment may
+# differ when re-pasting, and a missed match leaves PERMANENT access behind.
+KEY_BLOB=$(echo "$KEY" | awk '{print $2}')
+if [ -z "$KEY_BLOB" ]; then
+    err "Could not extract the key blob."
+    rm -rf "$TMPDIR_SAFE"
+    exit 1
+fi
+
 VALID_FROM="-1m"
 VALID_TO="+${CERT_HOURS}h"
 SERIAL="phone-$(date +%s)"
@@ -62,13 +71,24 @@ CERT_FILE="$TMPDIR_SAFE/phone-cert.pub"
 info "Signing key → cert (principal=$PRINCIPAL, valid ${CERT_HOURS}h)..."
 if [ "$DRY_RUN" = true ]; then
     warn "[DRY-RUN] Would run: ssh-keygen -s $CA_PRIV -I $SERIAL -n $PRINCIPAL -V ${VALID_FROM}:${VALID_TO} $TMPDIR_SAFE/phone.pub"
-else
-    ssh-keygen -s "$CA_PRIV" -I "$SERIAL" -n "$PRINCIPAL" -V "${VALID_FROM}:${VALID_TO}" "$TMPDIR_SAFE/phone.pub" 2>&1 | grep -v '^Signed user key' || true
-    [ -f "$TMPDIR_SAFE/phone-cert.pub" ] || { err "Signing failed."; exit 1; }
+    echo ""
+    info "(dry-run: no cert produced, nothing changed)"
+    rm -rf "$TMPDIR_SAFE"
+    exit 0
 fi
 
-CERT=$(cat "$CERT_FILE")
-EXPIRES=$(ssh-keygen -L -f "$CERT_FILE" 2>/dev/null | grep '^[[:space:]]*Valid' | sed 's/^[[:space:]]*//')
+SIGN_RC=0
+# Redirect output so the tty stays clean (the CA passphrase prompt still reads
+# from /dev/tty). Check the real exit status, not grep's.
+ssh-keygen -s "$CA_PRIV" -I "$SERIAL" -n "$PRINCIPAL" -V "${VALID_FROM}:${VALID_TO}" "$TMPDIR_SAFE/phone.pub" >/dev/null 2>&1 || SIGN_RC=1
+if [ "$SIGN_RC" -ne 0 ] || [ ! -f "$TMPDIR_SAFE/phone-cert.pub" ]; then
+    err "Signing failed."
+    rm -rf "$TMPDIR_SAFE"
+    exit 1
+fi
+
+CERT=$(cat "$TMPDIR_SAFE/phone-cert.pub")
+EXPIRES=$(ssh-keygen -L -f "$TMPDIR_SAFE/phone-cert.pub" 2>/dev/null | grep '^[[:space:]]*Valid' | sed 's/^[[:space:]]*//')
 
 echo ""
 ok "=== CERTIFICATE (valid ${CERT_HOURS}h, expires: ${EXPIRES:-check with ssh-keygen -L}) ==="
@@ -76,15 +96,23 @@ echo ""
 
 # ── Install on the server: authorized_keys ────
 AUTH_KEYS="$HOME/.ssh/authorized_keys"
-if [ "$DRY_RUN" = true ]; then
-    warn "[DRY-RUN] Would install the cert into $AUTH_KEYS"
-else
-    touch "$AUTH_KEYS"; chmod 600 "$AUTH_KEYS"
-    # Remove the phone's old raw key, then add the cert line
-    PHONE_COMMENT=$(echo "$KEY" | awk '{print $NF}')
-    [ -n "$PHONE_COMMENT" ] && sed -i "/ssh-ed25519 .* ${PHONE_COMMENT}/d" "$AUTH_KEYS"
+touch "$AUTH_KEYS"; chmod 600 "$AUTH_KEYS"
+
+# Order matters: append the CERT FIRST, then remove the old raw key. If the
+# script is interrupted between the two, the phone still has a valid credential.
+cp "$AUTH_KEYS" "$AUTH_KEYS.bak.$(date +%Y%m%d-%H%M%S)"
+if grep -qF "$KEY_BLOB" "$AUTH_KEYS"; then
     echo "$CERT" >> "$AUTH_KEYS"
-    ok "Cert installed into $AUTH_KEYS (old raw key removed)."
+    # Remove only the RAW key line containing this blob (certs don't contain it).
+    grep -vF "$KEY_BLOB" "$AUTH_KEYS" > "$AUTH_KEYS.tmp"
+    mv "$AUTH_KEYS.tmp" "$AUTH_KEYS"
+    chmod 600 "$AUTH_KEYS"
+    ok "Old raw key replaced by the cert in $AUTH_KEYS."
+else
+    err "The pasted key's blob was NOT found in $AUTH_KEYS — adding cert anyway, but"
+    err "the raw key is still active. Remove it manually:"
+    err "  grep -vF '$KEY_BLOB' $AUTH_KEYS > \$AUTH_KEYS.tmp && mv \$AUTH_KEYS.tmp \$AUTH_KEYS"
+    echo "$CERT" >> "$AUTH_KEYS"
 fi
 
 echo ""

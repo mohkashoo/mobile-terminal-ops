@@ -72,15 +72,17 @@ redact() {
     local data
     data=$(awk '
         BEGIN { redact=0 }
-        /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/ { print; redact=1; next }
-        redact && /-----END [A-Z0-9 ]*PRIVATE KEY-----/ { print; redact=0; next }
+        /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/ {
+            if ($0 ~ /-----END [A-Z0-9 ]*PRIVATE KEY-----/) { print "    [REDACTED - key material]"; next }
+            redact=1; print "    [REDACTED - key material]"; next }
+        redact && /-----END [A-Z0-9 ]*PRIVATE KEY-----/ { redact=0; print; next }
         redact { print "    [REDACTED - key material]"; next }
         { print }
     ' | sed -E \
         -e 's/([[:space:]]*Authorization[[:space:]]*[:=][[:space:]]*).*/\1[REDACTED]/Ig' \
         -e 's/([[:space:]]*Bearer[[:space:]]+)[A-Za-z0-9_.+=\/_-]+[[:space:]]*.*/\1[REDACTED]/Ig' \
         -e 's/(Api[-_ ]?Key|Access[-_ ]?Token|Refresh[-_ ]?Token|Client[-_ ]?Secret|Secret|Password|Passwd|Session[-_ ]?Token|Token|X-[A-Za-z-]*[Kk]ey)[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_.+=\/_-]{6,}/\1: [REDACTED]/Ig' \
-        -e 's/(sk-[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|ya29\.[0-9A-Za-z_-]{10,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})/[REDACTED]/g')
+        -e 's/(sk-[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{16,}|sk_(live|test)_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{20,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|ghu_[A-Za-z0-9]{20,}|ghs_[A-Za-z0-9]{20,}|ghr_[A-Za-z0-9]{20,}|npm_[A-Za-z0-9]{20,}|glpat-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|ya29\.[0-9A-Za-z_-]{10,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})/[REDACTED]/g')
     if declare -p EMAIL_REDACT_EXTRA >/dev/null 2>&1 && declare -p EMAIL_REDACT_EXTRA 2>/dev/null | grep -q '^declare -a'; then
         for pat in "${EMAIL_REDACT_EXTRA[@]}"; do
             [ -n "$pat" ] && data=$(printf '%s\n' "$data" | sed -E "s|${pat}|[REDACTED]|g")
@@ -112,6 +114,15 @@ elif [ "$EMAIL_ENCRYPT" = "age" ] && command -v age >/dev/null 2>&1 && [ -n "${E
     else
         ATTACH_NAME="summary.age"
     fi
+fi
+
+# Fail CLOSED: if the user asked for encryption and we couldn't produce a
+# payload, do NOT send plaintext through a mail path.
+if [ "$EMAIL_ENCRYPT" != "none" ] && [ -z "$ENCRYPTED_FILE" ]; then
+    echo "ERROR: EMAIL_ENCRYPT=$EMAIL_ENCRYPT but no encrypted payload was produced." >&2
+    echo "Refusing to send. Check gpg/age are installed and the recipient is set," >&2
+    echo "or set EMAIL_ENCRYPT=\"none\" in config/email-config to explicitly allow plaintext." >&2
+    exit 1
 fi
 
 # ── Escape HTML ──────────────────────────────
@@ -287,7 +298,9 @@ if command -v /usr/sbin/sendmail >/dev/null 2>&1; then
     echo "sendmail failed, trying mail command..." >&2
 fi
 
-if command -v mail >/dev/null 2>&1; then
+if command -v mail >/dev/null 2>&1 && [ -z "$ENCRYPTED_FILE" ]; then
+    # The mail transport only carries the HTML body; it DROPS the encrypted
+    # attachment, so it is only used when there is nothing to drop.
     if send_via_mail; then
         echo "email sent via local mail command to $EMAIL_TO"
         exit 0
@@ -311,10 +324,12 @@ if [ "$SMTP_CONFIGURED" = true ]; then
     fi
 fi
 
-# Last resort: write to file
+# Last resort: write to file (hardened: private queue dir + file perms)
 local_queue="$PROJECT_DIR/email-queue"
 mkdir -p "$local_queue"
+chmod 700 "$local_queue" 2>/dev/null || true
 local_file="${local_queue}/$(date +%Y%m%d-%H%M%S)-${EMAIL_TO}.eml"
 cp "$MSG_FILE" "$local_file"
+chmod 600 "$local_file" 2>/dev/null || true
 echo "email queued to $local_file (no MTA available)" >&2
 exit 1

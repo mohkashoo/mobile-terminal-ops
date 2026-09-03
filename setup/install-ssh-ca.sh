@@ -52,6 +52,14 @@ CA_PUB="$HOME/.ssh/mto-ca.pub"
 # ── 1. Create the CA keypair ──────────────────
 if [ -f "$CA_PRIV" ]; then
     ok "CA key already exists: $CA_PRIV"
+    # Verify the EXISTING key is not empty-passphrase (a leaked unencrypted CA
+    # can mint unlimited certs into the server).
+    if ssh-keygen -y -P '' -f "$CA_PRIV" >/dev/null 2>&1; then
+        err "CA private key has an EMPTY passphrase — anyone with this file can mint"
+        err "certificates into your server. Protect it:"
+        err "  ssh-keygen -p -f $CA_PRIV"
+        exit 1
+    fi
 else
     info "Creating SSH CA keypair..."
     warn "Protect the CA private key with a passphrase — it can mint credentials"
@@ -61,6 +69,12 @@ else
     else
         ssh-keygen -t ed25519 -f "$CA_PRIV" -C "mobile-terminal-ops CA"
         chmod 600 "$CA_PRIV"; chmod 644 "$CA_PUB"
+        # Fail hard if the key ended up unencrypted (e.g. Enter pressed twice).
+        if ssh-keygen -y -P '' -f "$CA_PRIV" >/dev/null 2>&1; then
+            err "CA key was created with an EMPTY passphrase. Refusing to proceed."
+            err "Delete $CA_PRIV and re-run, entering a real passphrase."
+            exit 1
+        fi
         ok "CA keypair created: $CA_PRIV (+ .pub)"
     fi
 fi
@@ -68,17 +82,38 @@ fi
 # ── 2. Trust the CA in sshd ───────────────────
 CA_LINE="TrustedUserCAKeys $CA_PUB"
 
+check_ca_active() {
+    # Confirm sshd is actually honoring our CA, not a drop-in or old value.
+    if sudo sshd -T 2>/dev/null | grep -qi "trustedusercakeys.*${CA_PUB}"; then
+        return 0
+    fi
+    return 1
+}
+
 if [ "$(uname -s)" = "Linux" ]; then
-    if grep -q '^TrustedUserCAKeys' /etc/ssh/sshd_config 2>/dev/null; then
-        warn "TrustedUserCAKeys already set in sshd_config — leaving as-is."
-        info "Verify it points to $CA_PUB"
+    if grep -qE '^[[:space:]]*TrustedUserCAKeys' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf 2>/dev/null; then
+        warn "TrustedUserCAKeys already set somewhere in sshd config."
+        if [ "$DRY_RUN" = true ]; then
+            warn "[DRY-RUN] Would verify it resolves to $CA_PUB"
+        elif check_ca_active; then
+            ok "Confirmed: sshd currently trusts $CA_PUB."
+        else
+            err "sshd has a TrustedUserCAKeys directive but it is NOT resolving to $CA_PUB."
+            err "Check /etc/ssh/sshd_config and /etc/ssh/sshd_config.d/*.conf and fix"
+            err "the conflict before relying on certs."
+            exit 1
+        fi
     else
         if [ "$DRY_RUN" = true ]; then
             warn "[DRY-RUN] Would append '$CA_LINE' to /etc/ssh/sshd_config and restart sshd"
         else
             echo "$CA_LINE" | sudo tee -a /etc/ssh/sshd_config > /dev/null
-            sudo sshd -t && sudo systemctl restart sshd
-            ok "sshd now trusts $CA_PUB."
+            if sudo sshd -t && sudo systemctl restart sshd && check_ca_active; then
+                ok "sshd now trusts $CA_PUB (verified with sshd -T)."
+            else
+                err "sshd did not come up with the CA trust. Check 'sudo sshd -t'."
+                exit 1
+            fi
         fi
     fi
 elif [ "$(uname -s)" = "Darwin" ]; then

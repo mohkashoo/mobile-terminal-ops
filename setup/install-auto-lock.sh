@@ -5,8 +5,9 @@
 #   1. Writes ~/.ssh/rc so every Tailscale (phone) SSH login updates the
 #      heartbeat automatically.
 #   2. Installs scripts/auto-lock-server.sh to ~/.local/bin/mto-auto-lock.sh.
-#   3. Installs a systemd timer (Linux) — or a crontab entry (fallback) —
-#      that runs the check hourly.
+#   3. Schedules the check hourly — system-level systemd timer (Linux) so it
+#      runs even with NO login session (unlike a user timer without linger),
+#      or a crontab entry as fallback.
 #
 # When no heartbeat has arrived for MAX_IDLE_HOURS (default 24), the phone's
 # key is revoked from ~/.ssh/authorized_keys automatically.
@@ -32,6 +33,7 @@ MAX_IDLE_HOURS="${MAX_IDLE_HOURS:-24}"
 
 mkdir -p "$BIN_DIR"
 mkdir -p "$(dirname "$HEARTBEAT_FILE")"
+mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
 
 # ── 1. Heartbeat on login via ~/.ssh/rc ──────
 info "Writing ~/.ssh/rc to update heartbeat on every Tailscale SSH login..."
@@ -50,6 +52,8 @@ fi
 RC
 chmod 700 "$HOME/.ssh/rc"
 ok "Heartbeat installed — every phone (Tailscale) login refreshes $HEARTBEAT_FILE"
+warn "FIRST-RUN FOOTGUN: the switch is now armed. If the phone does NOT log in within"
+warn "MAX_IDLE_HOURS ($MAX_IDLE_HOURS h), the key gets revoked. Log in once to arm it safely."
 
 # ── 2. Install the check script ───────────────
 info "Installing $AUTO_LOCK → $BIN_DIR/mto-auto-lock.sh"
@@ -57,20 +61,25 @@ cp "$AUTO_LOCK" "$BIN_DIR/mto-auto-lock.sh"
 chmod +x "$BIN_DIR/mto-auto-lock.sh"
 ok "Installed."
 
-# ── 3. Scheduling: systemd timer or cron ──────
+# ── 3. Scheduling ─────────────────────────────
+SCHEDULED=false
+
 if [ "$(uname -s)" = "Linux" ] && command -v systemctl >/dev/null 2>&1; then
-    info "Installing systemd timer (runs hourly)..."
-    mkdir -p "$HOME/.config/systemd/user"
-    cat > "$HOME/.config/systemd/user/mto-autolock.service" << EOF
+    info "Installing SYSTEM-level systemd timer (runs hourly, no login session needed)..."
+    # System-level units run regardless of the user's login state; they are
+    # the only form that doesn't silently die when you reboot and haven't
+    # logged in yet. Requires sudo.
+    sudo tee /etc/systemd/system/mto-autolock.service > /dev/null << EOF
 [Unit]
 Description=Mobile Terminal Ops — revoke phone key after idle timeout
 
 [Service]
 Type=oneshot
+User=$USER
 ExecStart=$BIN_DIR/mto-auto-lock.sh
 Environment=MAX_IDLE_HOURS=$MAX_IDLE_HOURS
 EOF
-    cat > "$HOME/.config/systemd/user/mto-autolock.timer" << EOF
+    sudo tee /etc/systemd/system/mto-autolock.timer > /dev/null << EOF
 [Unit]
 Description=Mobile Terminal Ops — dead-man's switch hourly check
 
@@ -82,15 +91,29 @@ Unit=mto-autolock.service
 [Install]
 WantedBy=timers.target
 EOF
-    systemctl --user daemon-reload
-    systemctl --user enable --now mto-autolock.timer
-    ok "systemd user timer enabled (mto-autolock.timer, hourly)."
-    systemctl --user list-timers mto-autolock.timer 2>/dev/null | grep mto || true
-else
-    info "No systemd available — installing crontab entry (hourly)."
+    if sudo systemctl daemon-reload && sudo systemctl enable --now mto-autolock.timer; then
+        ok "systemd timer enabled (mto-autolock.timer, hourly)."
+        SCHEDULED=true
+    else
+        err "systemd timer install failed — falling back to cron."
+    fi
+fi
+
+if [ "$SCHEDULED" = false ] && command -v crontab >/dev/null 2>&1; then
+    info "Installing crontab entry (hourly)."
     CRON_LINE="0 * * * * $BIN_DIR/mto-auto-lock.sh"
-    ( crontab -l 2>/dev/null | grep -v 'mto-auto-lock.sh'; echo "$CRON_LINE" ) | crontab -
+    # `|| true` on `crontab -l` so a fresh system (no crontab yet) still gets
+    # the entry written instead of aborting on the non-zero exit.
+    ( crontab -l 2>/dev/null | grep -v 'mto-auto-lock.sh' || true; echo "$CRON_LINE" ) | crontab -
     ok "Crontab entry installed: $CRON_LINE"
+    SCHEDULED=true
+fi
+
+if [ "$SCHEDULED" = false ]; then
+    err "No scheduler installed! Add a crontab line manually:"
+    err "  $BIN_DIR/mto-auto-lock.sh"
+    err "The dead-man's switch is NOT armed."
+    exit 1
 fi
 
 echo ""
@@ -99,9 +122,12 @@ echo ""
 info "Phone heartbeats arrive automatically on every SSH login."
 info "If no heartbeat for ${MAX_IDLE_HOURS}h, the phone key is revoked."
 info ""
-info "Tuning:"
-info "  MAX_IDLE_HOURS env var at install time (default 24)"
-info "  PHONE_KEY_COMMENT env var at install time to match your phone key"
+info "How to NOTICE if the watchdog dies (README 'Watchdog health'):"
+info "  ${BIN_DIR}/mto-auto-lock.sh --check-health"
 info ""
-info "Manual check:  $BIN_DIR/mto-auto-lock.sh"
+info "Tuning (install-time env vars):"
+info "  MAX_IDLE_HOURS   (default 24)"
+info "  PHONE_KEY_COMMENT (default termux-|iphone-|blink)"
+info ""
 info "Log file:      ${XDG_DATA_HOME:-$HOME/.local/share}/mobile-terminal-ops/auto-lock.log"
+info "Last run:      ${XDG_DATA_HOME:-$HOME/.local/share}/mobile-terminal-ops/auto-lock-last-run"

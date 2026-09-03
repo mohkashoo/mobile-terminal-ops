@@ -49,6 +49,10 @@ EMAIL_SMTP_OK=""
 #   EMAIL_ENCRYPT="none"   → plaintext body (local relay only, no SMTP)
 #   EMAIL_ENCRYPT="gpg"    → GPG public-key encryption
 #   EMAIL_ENCRYPT="age"    → age file encryption
+#
+# FAIL-CLOSED: if EMAIL_ENCRYPT is set but no encrypted payload can be
+# produced (tool missing, recipient not in keyring), the script REFUSES to
+# send rather than silently falling back to plaintext.
 EMAIL_ENCRYPT="none"
 
 # For gpg: a recipient whose public key is in your keyring. Decrypt on your
