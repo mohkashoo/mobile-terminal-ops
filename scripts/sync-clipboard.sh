@@ -5,6 +5,10 @@
 # When a new line appears, it syncs back to the Termux clipboard.
 # Also pushes Termux clipboard content to the server on demand.
 #
+# SECURITY: Clipboard content crosses the SSH tunnel as PLAINTEXT on the
+# server (~/.phone-clipboard). Do NOT push passwords, API keys, tokens, or
+# private keys through this. First run requires an explicit acknowledgment.
+#
 # Usage:
 #   bash sync-clipboard.sh watch       # Start clipboard watch daemon
 #   bash sync-clipboard.sh push        # Push phone clipboard → server
@@ -18,6 +22,43 @@ SYNC_LOG=~/clipboard-sync.log
 
 info() { echo -e "\033[0;36m[*]\033[0m $*"; }
 ok()   { echo -e "\033[0;32m[+]\033[0m $*"; }
+warn() { echo -e "\033[0;33m[!]\033[0m $*"; }
+err()  { echo -e "\033[0;31m[x]\033[0m $*"; }
+
+warn_secrets() {
+    echo ""
+    warn "CLIPBOARD SYNC = PLAINTEXT ON THE SERVER"
+    warn "Everything you push lands in ~/.phone-clipboard on the server,"
+    warn "unencrypted. Never sync passwords, API keys, tokens, or private"
+    warn "keys through this. This warning is printed on every run."
+    echo ""
+}
+
+warn_secrets
+
+ACK_FILE="${XDG_DATA_HOME:-$HOME/.local/share}/mobile-terminal-ops/clipboard-ack"
+if [ ! -f "$ACK_FILE" ]; then
+    if [ "${1:-}" = "--i-understand-clipboard-is-plaintext" ]; then
+        mkdir -p "$(dirname "$ACK_FILE")"
+        touch "$ACK_FILE"
+        ok "Acknowledged. This gate will not block future runs."
+    else
+        echo -en "\033[0;33m[?]\033[0m Type 'yes' to confirm you understand: "
+        read -r ans
+        if [ "$ans" = "yes" ]; then
+            mkdir -p "$(dirname "$ACK_FILE")"
+            touch "$ACK_FILE"
+            ok "Acknowledged. This gate will not block future runs."
+        else
+            err "Aborted — clipboard sync requires explicit acknowledgment."
+            exit 1
+        fi
+    fi
+fi
+
+case "${1:-}" in
+    --i-understand-clipboard-is-plaintext) shift ;;
+esac
 
 push_to_server() {
     if ! command -v termux-clipboard-get &>/dev/null; then

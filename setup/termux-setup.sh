@@ -10,11 +10,17 @@ err()   { echo -e "${RED}[x]${NC} $1"; }
 
 DRY_RUN=false
 FORCE=false
+NO_PASSPHRASE=false
+I_UNDERSTAND_RISK=false
 
 usage() {
-    echo "Usage: $0 [--dry-run] [--force]"
-    echo "  --dry-run  Show what would change without applying anything"
-    echo "  --force    Skip confirmation prompts and overwrite existing config"
+    echo "Usage: $0 [--dry-run] [--force] [--no-passphrase --i-understand-the-risk]"
+    echo "  --dry-run    Show what would change without applying anything"
+    echo "  --force      Skip confirmation prompts and overwrite existing config"
+    echo "  --no-passphrase --i-understand-the-risk"
+    echo "               Generate an UNENCRYPTED SSH key. NEVER use this unless you"
+    echo "               understand that a stolen phone means a stolen key. Both flags"
+    echo "               are required together; the script refuses otherwise."
     exit 0
 }
 
@@ -22,10 +28,17 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --dry-run) DRY_RUN=true; shift ;;
         --force) FORCE=true; shift ;;
+        --no-passphrase) NO_PASSPHRASE=true; shift ;;
+        --i-understand-the-risk) I_UNDERSTAND_RISK=true; shift ;;
         --help|-h) usage ;;
         *) err "Unknown option: $1"; usage ;;
     esac
 done
+
+if [ "$NO_PASSPHRASE" = true ] && [ "$I_UNDERSTAND_RISK" != true ]; then
+    err "--no-passphrase requires --i-understand-the-risk. Refusing to generate an unencrypted key."
+    exit 1
+fi
 
 run() {
     if [ "$DRY_RUN" = true ]; then
@@ -73,13 +86,26 @@ ok "Packages installed."
 if [ ! -f ~/.ssh/id_ed25519 ]; then
     info "Generating ED25519 SSH key..."
     if [ "$DRY_RUN" = true ]; then
-        warn "[DRY-RUN] Would generate: ssh-keygen -t ed25519"
+        warn "[DRY-RUN] Would generate: ssh-keygen -t ed25519 (passphrase-protected)"
     else
-        ssh-keygen -t ed25519 -C "termux-$(hostname)" -f ~/.ssh/id_ed25519 -N ""
+        if [ "$NO_PASSPHRASE" = true ]; then
+            warn "Generating UNENCRYPTED key because you passed --no-passphrase --i-understand-the-risk."
+            ssh-keygen -t ed25519 -C "termux-$(hostname)" -f ~/.ssh/id_ed25519 -N ""
+        else
+            warn "A passphrase is REQUIRED. If your phone is lost or stolen, an unencrypted key"
+            warn "hands the attacker your server. Enter a strong passphrase when prompted."
+            ssh-keygen -t ed25519 -C "termux-$(hostname)" -f ~/.ssh/id_ed25519
+        fi
         ok "SSH key generated: ~/.ssh/id_ed25519.pub"
     fi
 else
     ok "SSH key already exists at ~/.ssh/id_ed25519"
+    if [ "$NO_PASSPHRASE" = true ] || [ "$I_UNDERSTAND_RISK" = true ]; then
+        warn "Key already exists — passphrase flags only apply to generation."
+        if [ -n "$(ssh-keygen -y -P '' -f ~/.ssh/id_ed25519 2>/dev/null)" ]; then
+            err "Existing key has NO passphrase. Protect it: ssh-keygen -p -f ~/.ssh/id_ed25519"
+        fi
+    fi
 fi
 
 if grep -q "Host hunt" ~/.ssh/config 2>/dev/null; then

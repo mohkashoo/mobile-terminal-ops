@@ -20,6 +20,26 @@ ok()    { echo -e "${GREEN}[+]${NC} $1"; }
 warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
 err()   { echo -e "${RED}[x]${NC} $1"; }
 
+NO_PASSPHRASE=false
+I_UNDERSTAND_RISK=false
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --no-passphrase) NO_PASSPHRASE=true; shift ;;
+        --i-understand-the-risk) I_UNDERSTAND_RISK=true; shift ;;
+        --help|-h)
+            echo "Usage: $0 [--no-passphrase --i-understand-the-risk]"
+            echo "  A passphrase on your SSH key is REQUIRED. Generating an unencrypted key"
+            echo "  requires both --no-passphrase AND --i-understand-the-risk."
+            exit 0 ;;
+        *) err "Unknown option: $1"; exit 1 ;;
+    esac
+done
+
+if [ "$NO_PASSPHRASE" = true ] && [ "$I_UNDERSTAND_RISK" != true ]; then
+    err "--no-passphrase requires --i-understand-the-risk. Refusing to generate an unencrypted key."
+    exit 1
+fi
+
 echo -e "${CYAN}"
 echo "╔═══════════════════════════════════════════╗"
 echo "║     iPhone (iSH) Setup                    ║"
@@ -36,7 +56,14 @@ ok "Packages installed."
 
 if [ ! -f ~/.ssh/id_ed25519 ]; then
     info "Generating ED25519 SSH key..."
-    ssh-keygen -t ed25519 -C "iphone-ish-$(hostname)" -f ~/.ssh/id_ed25519 -N ""
+    if [ "$NO_PASSPHRASE" = true ]; then
+        warn "Generating UNENCRYPTED key because you passed --no-passphrase --i-understand-the-risk."
+        ssh-keygen -t ed25519 -C "iphone-ish-$(hostname)" -f ~/.ssh/id_ed25519 -N ""
+    else
+        warn "A passphrase is REQUIRED. If your phone is lost or stolen, an unencrypted key"
+        warn "hands the attacker your server. Enter a strong passphrase when prompted."
+        ssh-keygen -t ed25519 -C "iphone-ish-$(hostname)" -f ~/.ssh/id_ed25519
+    fi
     ok "SSH key generated: ~/.ssh/id_ed25519.pub"
 else
     ok "SSH key already exists."
