@@ -14,6 +14,8 @@ Open Blink and run:
 ssh-keygen -t ed25519 -C "iphone-blink"
 ```
 
+**Set a passphrase when prompted.** This is required by this project's threat model — if your phone is stolen, a passphrase-protected key can't be used to reach your server on its own. (Unencrypted keys are only acceptable if you've consciously decided otherwise.)
+
 The key is stored in Blink's internal storage at `~/.ssh/id_ed25519.pub`.
 
 ### 3. Copy Your Public Key
