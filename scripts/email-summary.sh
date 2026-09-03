@@ -196,7 +196,7 @@ EOF
 build_mime() {
     if [ -z "$ENCRYPTED_FILE" ]; then
         # Simple multipart/alternative (plain + redacted html)
-        local boundary="----=_NextPart_$(date +%s%N)"
+        local boundary="----=_NextPart_$(date +%s)-$$-${RANDOM:-0}"
         cat <<EOFMAIL
 From: ${EMAIL_FROM}
 To: ${EMAIL_TO}
@@ -219,8 +219,8 @@ ${HTML_BODY}
 EOFMAIL
     else
         # multipart/mixed: redacted preview + encrypted attachment
-        local mixed="----=_Mixed_$(date +%s%N)"
-        local alt="----=_Alt_$(date +%s%N)"
+        local mixed="----=_Mixed_$(date +%s)-$$-${RANDOM:-0}"
+        local alt="----=_Alt_$(date +%s)-$$-${RANDOM:-0}"
         local enc_b64
         enc_b64=$(base64 < "$ENCRYPTED_FILE" | tr -d '\r')
         cat <<EOFMAIL

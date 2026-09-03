@@ -482,6 +482,22 @@ in the Result column with your measured outcome.
 **If you run any of these and the "pass" column doesn't hold — that's a bug.
 Open an issue so it gets fixed.**
 
+### Audit status — read before you trust this
+
+This is a **solo-maintainer** tool. It has not been through a formal external
+security audit, and there is no second human reviewer with real stakes in it
+going wrong. What it does have:
+
+- An automated test suite (`tests/run-tests.sh`, run in CI) that asserts
+  **fail-closed** behavior on the critical controls — the passphrase gate,
+  redaction, SMTP opt-in, encryption refusal, and the dead-man's switch
+  (including the single-key and future-mtime edge cases).
+- One adversarial review pass over the dead-man's switch, SSH CA, email, and
+  clipboard scripts (see CHANGELOG v2.0.0 for the findings it produced).
+- Test coverage is *not* the same as an audit, and an audit is *not* the same
+  as a guarantee. Budget for the same bus-factor risk as any one-person
+  project: review the scripts that gate your access before you rely on them.
+
 ### Watchdog health — how you'd notice the dead-man's switch died
 
 A dead-man's switch that silently stops functioning is worse than none,

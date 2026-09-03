@@ -64,6 +64,10 @@ operator does nothing.
 - Clipboard sync used single-quoted `~` remotely (silent no-op) — fixed.
 - Queue fallback wrote world-readable files — now 0600/0700.
 - `sign-phone-key.sh --dry-run` previously always failed — fixed.
+- MIME boundary seeds used GNU-only `date +%s%N`; replaced with a portable
+  `date +%s` + PID + `$RANDOM` tag for macOS/BSD compatibility.
+- README "Audit status" note added: this is a solo-maintainer tool, not
+  formally audited — test coverage ≠ an audit, stated explicitly.
 
 ## [1.0.0] - 2026-07-18
 
